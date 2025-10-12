@@ -299,7 +299,7 @@ All fixes are working when:
 
 **Version: 1.1.7  
 **Last Updated:** October 11, 2025  
-**Author:** ByWater Solutions
+**Author: Terry Rossio, CirriusImpact
 
 
 
