@@ -257,10 +257,9 @@ Both drivers extend `SMS::Send::Driver` and implement:
 
 ---
 
-**Version:** 1.1.7  
+**Version:** 1.1.9  
 **Last Updated:** October 11, 2025  
-**Author:** ByWater Solutions
-
+**Author: Terry Rossio, CirriusImpact
 
 
 
