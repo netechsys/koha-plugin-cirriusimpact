@@ -2,7 +2,7 @@
 
 This document provides complete, ready-to-use notice template examples for various scenarios.
 
-**🆕 NEW in v1.1.7:** 
+**🆕 NEW in v1.1.9:** 
 - CSV now includes `messageText` column with full message content
 - Universal templates that work for BOTH digest and individual modes
 - Every example includes SMS **and** Phone templates side-by-side
@@ -1176,7 +1176,7 @@ sms:
 
 ---
 
-**Version: 1.1.7  
+**Version: 1.1.9  
 **Last Updated:** October 11, 2025  
-**Author:** ByWater Solutions
+**Author: Terry Rossio, CirriusImpact
 
