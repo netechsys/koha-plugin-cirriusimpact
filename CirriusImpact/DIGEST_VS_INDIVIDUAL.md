@@ -517,9 +517,9 @@ Check your Koha version's notice documentation for correct syntax.
 
 ---
 
-**Version:** 1.1.7  
+**Version:** 1.1.9  
 **messageText column:** Added in v1.1.7  
 **Last Updated:** October 11, 2025  
-**Author:** ByWater Solutions
+**Author: Terry Rossio, CirriusImpact
 
 
