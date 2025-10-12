@@ -124,7 +124,7 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call 7315551234."
 ---
 ```
 
@@ -170,7 +170,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Overdue: [% biblio.title %] due [% issue.date_due | $KohaDates %]. Return immediately. [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Overdue: [% biblio.title %] due [% issue.date_due | $KohaDates %]. Return immediately. 7315551234."
 ---
 ```
 
@@ -254,13 +254,13 @@ This was already done in Step 3 above, but lets re-run the verification to confi
 ### Which Driver Should I Use?
 
 **US::CirriusImpact** (Recommended for most users)
-- ✅ Accepts: 7325551212, (732) 555-1212, +1 732 555 1212, +44...
+- ✅ Accepts: 7315551212, (731) 555-1212, +1 731 555 1212, +44...
 - ✅ Works with: US regional AND international numbers
 - ✅ No + prefix required
 - ✅ Best for: US libraries, mixed environments
 
 **CirriusImpact** (International only)
-- ✅ Accepts: +1 732 586 1275, +44 20 1234 5678, +61...
+- ✅ Accepts: +1 731 555 1234, +44 20 1234 5678, +61...
 - ❌ Requires: + prefix on ALL numbers
 - ✅ Best for: Strictly international deployments
 
@@ -280,7 +280,7 @@ This automatically installs BOTH US::CirriusImpact and CirriusImpact.
 
 ### Error: "Cannot use regional phone numbers with an international driver"
 
-**Cause:** Using `SMSSendDriver = 'CirriusImpact'` with numbers like 7325861275
+**Cause:** Using `SMSSendDriver = 'CirriusImpact'` with numbers like 7315551234
 
 **Fix:** Change to US driver:
 ```

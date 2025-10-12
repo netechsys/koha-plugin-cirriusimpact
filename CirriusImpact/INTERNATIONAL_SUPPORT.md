@@ -42,8 +42,8 @@ The driver accepts **all** phone number formats and passes them through to the C
 ### Regional/Local Formats
 ```
 ✓ (555) 123-4567         (US local format)
-✓ 555-123-4567           (US dashed format)
-✓ 5551234567             (Plain digits)
+✓ 731-555-1234           (US dashed format)
+✓ 7315551234             (Plain digits)
 ✓ 020 1234 5678          (UK local format)
 ✓ 02 1234 5678           (AU local format)
 ```
@@ -93,7 +93,7 @@ You can use either format:
 **Option 2: Local format**
 ```
 (555) 123-4567
-5551234567
+7315551234
 ```
 
 ## Testing International Numbers

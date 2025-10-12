@@ -104,7 +104,7 @@
 ### Driver Changes
 - **Change**: Moved from `SMS::Send::CirriusImpact` to `SMS::Send::US::CirriusImpact`
 - **Reason**: US regional driver allows phone numbers without + prefix while still accepting international numbers
-- **Compatibility**: Works with US regional (7325861275) AND international (+44 20 1234 5678) formats
+- **Compatibility**: Works with US regional (7315551234) AND international (+44 20 1234 5678) formats
 - **Version**: Driver v1.0.1
 
 ### Configuration

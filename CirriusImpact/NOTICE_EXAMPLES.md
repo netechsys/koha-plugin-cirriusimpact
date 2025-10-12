@@ -191,7 +191,7 @@ sms:
 
 **Example output:**
 ```
-Centerville - Items checked out: Learning SQL (due 10/25/2025); The poems (due 10/25/2025); The bible (due 10/25/2025). Questions? Call 732-555-3663
+Centerville - Items checked out: Learning SQL (due 10/25/2025); The poems (due 10/25/2025); The bible (due 10/25/2025). Questions? Call 7315551234
 ```
 
 ---
@@ -220,7 +220,7 @@ Centerville - You checked out 3 item(s):
 • Learning SQL - Due: 10/25/2025
 • The poems - Due: 10/25/2025
 • The bible - Due: 10/25/2025
-Return on time to avoid fines. Questions? 732-555-3663
+Return on time to avoid fines. Questions? 7315551234
 ```
 
 ---
@@ -302,7 +302,7 @@ sms:
 
 **Example output:**
 ```
-Centerville - 3 hold(s) ready: Learning SQL; The poems; The bible. Pickup at Centerville. Questions? 732-555-3663
+Centerville - 3 hold(s) ready: Learning SQL; The poems; The bible. Pickup at Centerville. Questions? 7315551234
 ```
 
 ---
@@ -332,7 +332,7 @@ Centerville - 3 hold(s) ready for pickup:
 • Learning SQL
 • The poems
 • The bible
-Pick up by 10/18/2025. Questions? 732-555-3663
+Pick up by 10/18/2025. Questions? 7315551234
 ```
 
 ---
@@ -450,7 +450,7 @@ call:
 **Example output:**
 ```
 SMS: "CPL OVERDUE: Learning SQL due 10/05/2025. Fine: $2.50. Return now!"
-Phone: "Hello Yossi. Centerville. Overdue: Learning SQL due 10/05/2025. Current fine: $2.50. Return immediately. 732-555-3663."
+Phone: "Hello [% borrower.firstname %]. Centerville. Overdue: Learning SQL due 10/05/2025. Current fine: $2.50. Return immediately. 7315551234."
 ```
 
 ---
@@ -1118,12 +1118,12 @@ sms:
 | Variable | Description | Example Value |
 |----------|-------------|---------------|
 | `borrowernumber` | Patron ID | 52 |
-| `borrower.firstname` | First name | Yossi |
-| `borrower.surname` | Last name | Teichman |
-| `borrower.cardnumber` | Card barcode | 01234567890 |
+| `borrower.firstname` | First name | [% borrower.firstname %] |
+| `borrower.surname` | Last name | [% borrower.surname %] |
+| `borrower.cardnumber` | Card barcode | [% borrower.cardnumber %] |
 | `branch.branchname` | Library name | Centerville |
 | `branch.branchcode` | Library code | CPL |
-| `branch.branchphone` | Library phone | 732-555-3663 |
+| `branch.branchphone` | Library phone | 7315551234 |
 | `checkouts` | Array of checkouts | (array) |
 | `checkouts.size` | Number of items | 3 |
 | `checkout.item.biblio.title` | Item title | Learning SQL |

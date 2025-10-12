@@ -32,7 +32,7 @@ The driver integrates with the Koha CirriusImpact plugin which handles
 the actual message delivery via SFTP export to CirriusImpact's service.
 
 As a US-regional driver, it accepts:
-- US regional numbers: 7325861275, (732) 586-1275
+- US regional numbers: 7315551234, (731) 555-1234
 - International numbers: +44 20 1234 5678, +1 732 586 1275
 - Any other format - no validation performed
 
@@ -87,7 +87,7 @@ Sends an SMS message. Returns 1 on success, 0 on failure.
 
 Accepts phone numbers in ANY format:
 - US regional: 7325861275, (732) 586-1275
-- US international: +1 732 586 1275
+- US international: +1 731 555 1234
 - Other international: +44 20 1234 5678, +61 2 1234 5678
 
 The message is not actually sent by this driver - it is intercepted by
@@ -135,8 +135,8 @@ regional US numbers without + prefix, but the driver accepts and passes
 through international numbers as well.
 
 Supported formats:
-- US regional: 5551234567, (555) 123-4567
-- US international: +1 555 123 4567
+- US regional: 7315551234, (731) 555-1234
+- US international: +1 731 555 1234
 - UK: +44 20 1234 5678
 - Australia: +61 2 1234 5678
 - Any other international format

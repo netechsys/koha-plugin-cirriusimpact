@@ -195,7 +195,7 @@ call:
 
 **CSV output:** 1 row
 ```csv
-S,default,HOLD,,,Yossi,Teichman,7325861275,...,CPL,Centerville,413,,Learning SQL; The poems; The bible,...,"Centerville - 3 holds ready: Learning SQL; The poems; The bible. Pickup ASAP"
+S,default,HOLD,,,[% borrower.firstname %],[% borrower.surname %],7315551234,...,CPL,Centerville,413,,Learning SQL; The poems; The bible,...,"Centerville - 3 holds ready: Learning SQL; The poems; The bible. Pickup ASAP"
 ```
 
 **Key points:**
@@ -210,9 +210,9 @@ S,default,HOLD,,,Yossi,Teichman,7325861275,...,CPL,Centerville,413,,Learning SQL
 
 **CSV output:** 3 rows
 ```csv
-S,default,HOLD,,,Yossi,Teichman,7325861275,...,CPL,Centerville,413,,Learning SQL,...,"Centerville - Hold ready: Learning SQL. Pickup ASAP"
-S,default,HOLD,,,Yossi,Teichman,7325861275,...,CPL,Centerville,721,,The poems,...,"Centerville - Hold ready: The poems. Pickup ASAP"
-S,default,HOLD,,,Yossi,Teichman,7325861275,...,CPL,Centerville,193,,The bible,...,"Centerville - Hold ready: The bible. Pickup ASAP"
+S,default,HOLD,,,[% borrower.firstname %],[% borrower.surname %],7315551234,...,CPL,Centerville,413,,Learning SQL,...,"Centerville - Hold ready: Learning SQL. Pickup ASAP"
+S,default,HOLD,,,[% borrower.firstname %],[% borrower.surname %],7315551234,...,CPL,Centerville,721,,The poems,...,"Centerville - Hold ready: The poems. Pickup ASAP"
+S,default,HOLD,,,[% borrower.firstname %],[% borrower.surname %],7315551234,...,CPL,Centerville,193,,The bible,...,"Centerville - Hold ready: The bible. Pickup ASAP"
 ```
 
 **Key points:**

@@ -163,7 +163,7 @@ OVERDUE: 3 items from Centerville: Learning SQL (due 10/05/2025); The poems (due
 
 **Example - Compact:**
 ```
-CPL: 5 items due 10/25: SQL; Poems; Bible; Heat; Dogs. 732-555-3663
+CPL: 5 items due 10/25: SQL; Poems; Bible; Heat; Dogs. 7315551234
 ```
 
 ### Phone (30-45 seconds)

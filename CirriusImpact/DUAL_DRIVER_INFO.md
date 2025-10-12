@@ -18,7 +18,7 @@ SMS::Send framework treats drivers differently based on naming:
 
 ### The Solution
 Install both drivers to support all scenarios:
-- Libraries using regional US numbers (7325861275)
+- Libraries using regional US numbers (7315551234)
 - Libraries using international numbers (+44 20 1234 5678)
 - Mixed environments
 - Legacy installations
@@ -28,8 +28,8 @@ Install both drivers to support all scenarios:
 | Feature | US::CirriusImpact | CirriusImpact |
 |---------|-------------------|---------------|
 | **Classification** | US Regional | International |
-| **US Regional** | ✅ 7325861275 | ❌ Requires +1 |
-| **US International** | ✅ +1 732 586 1275 | ✅ +1 732 586 1275 |
+| **US Regional** | ✅ 7315551234 | ❌ Requires +1 |
+| **US International** | ✅ +1 731 555 1234 | ✅ +1 731 555 1234 |
 | **UK Numbers** | ✅ +44 20 1234 5678 | ✅ +44 20 1234 5678 |
 | **Other International** | ✅ +XX ... | ✅ +XX ... |
 | **Recommended For** | Most users | Int'l only |
@@ -118,10 +118,10 @@ Expected output:
 
 All of these work:
 ```
-✓ 7325861275                (US regional)
-✓ (732) 586-1275           (US formatted)
-✓ 732-586-1275             (US dashed)
-✓ +1 732 586 1275          (US international)
+✓ 7315551234                (US regional)
+✓ (731) 555-1234           (US formatted)
+✓ 731-555-1234             (US dashed)
+✓ +1 731 555 1234          (US international)
 ✓ +44 20 1234 5678         (UK)
 ✓ +61 2 1234 5678          (Australia)
 ✓ +33 1 23 45 67 89        (France)
@@ -134,8 +134,8 @@ Only these work:
 ✓ +1 732 586 1275          (US international)
 ✓ +44 20 1234 5678         (UK)
 ✓ +61 2 1234 5678          (Australia)
-✗ 7325861275               (Error: requires +)
-✗ (732) 586-1275           (Error: requires +)
+✗ 7315551234               (Error: requires +)
+✗ (731) 555-1234           (Error: requires +)
 ```
 
 ## Migration Guide
@@ -229,7 +229,7 @@ Both drivers extend `SMS::Send::Driver` and implement:
 ```
 ✓ Use: US::CirriusImpact
 ✓ Benefit: No + prefix needed
-✓ Works with: 7325861275, +1 732 586 1275, +44...
+✓ Works with: 7315551234, +1 731 555 1234, +44...
 ```
 
 ### For International Libraries

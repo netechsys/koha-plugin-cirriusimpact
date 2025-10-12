@@ -101,7 +101,7 @@ use SMS::Send;
 my $sender = SMS::Send->new('US::CirriusImpact');
 # Test with regional number (no + prefix)
 my $result = $sender->send_sms(
-    to => '7325861275',
+    to => '7315551234',
     text => 'Test message'
 );
 if ($result) {
@@ -114,7 +114,7 @@ if ($result) {
 EOFTEST
 
 if perl /tmp/test_regional_number.pl 2>/dev/null; then
-    echo -e "${GREEN}✓ Regional phone number accepted: 7325861275${NC}"
+    echo -e "${GREEN}✓ Regional phone number accepted: 7315551234${NC}"
 else
     echo -e "${RED}✗ Regional phone number test failed${NC}"
     exit 1

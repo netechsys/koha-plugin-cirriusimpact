@@ -33,10 +33,10 @@ All message types generated correctly with full CSV field population.
 
 **Results:**
 ```csv
-V,default,CHECKOUT,,001,,T,R,7325553663,tcr@cgstogo.com,CPL,Centerville,20,2025-10-19 23:59:00,The Thirty Years War :,,,,,51,,,,,,Hello Terry. Centerville. You checked out The Thirty Years War  due 10/19/2025. Thank you!
-V,default,CHECKOUT,,001,,T,R,7325553663,tcr@cgstogo.com,CPL,Centerville,877,2025-10-19 23:59:00,The bible :,,,,,51,,,,,,Hello Terry. Centerville. You checked out The bible  due 10/19/2025. Thank you!
-S,default,CHECKOUT,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centerville,413,2025-10-19 23:59:00,The poems,,,,,52,,10,1,,,CPL: Checked out: The poems. Due 10/19/2025
-S,default,CHECKOUT,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centerville,721,2025-10-19 23:59:00,Learning SQL /,,,,,52,,10,1,,,CPL: Checked out: Learning SQL . Due 10/19/2025
+V,default,CHECKOUT,,001,,T,R,7315551234,user@example.com,CPL,Centerville,20,2025-10-19 23:59:00,The Thirty Years War :,,,,,51,,,,,,Hello [% borrower.firstname %]. Centerville. You checked out The Thirty Years War  due 10/19/2025. Thank you!
+V,default,CHECKOUT,,001,,T,R,7315551234,user@example.com,CPL,Centerville,877,2025-10-19 23:59:00,The bible :,,,,,51,,,,,,Hello [% borrower.firstname %]. Centerville. You checked out The bible  due 10/19/2025. Thank you!
+S,default,CHECKOUT,,01234567890,,Y,T,7315555678,user2@example.com,CPL,Centerville,413,2025-10-19 23:59:00,The poems,,,,,52,,10,1,,,CPL: Checked out: The poems. Due 10/19/2025
+S,default,CHECKOUT,,01234567890,,Y,T,7315555678,user2@example.com,CPL,Centerville,721,2025-10-19 23:59:00,Learning SQL /,,,,,52,,10,1,,,CPL: Checked out: Learning SQL . Due 10/19/2025
 ```
 
 **Verification:**
@@ -59,10 +59,10 @@ S,default,CHECKOUT,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centervil
 
 **Results:**
 ```csv
-S,default,CHECKIN,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centerville,721,2025-10-12 03:55:16,Learning SQL /,,,,,52,,11,1,,,CPL: The following items have been checked in: Learning SQL . Thank you.
-S,default,CHECKIN,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centerville,413,2025-10-12 03:55:18,The poems,,,,,52,,11,1,,,CPL: The following items have been checked in: The poems. Thank you.
-V,default,CHECKIN,,001,,T,R,7325553663,tcr@cgstogo.com,CPL,Centerville,877,2025-10-12 03:55:47,The bible :,,,,,51,,,,,,Hello Terry. The following item was checked in: The bible . Thank you!
-V,default,CHECKIN,,001,,T,R,7325553663,tcr@cgstogo.com,CPL,Centerville,20,2025-10-12 03:55:49,The Thirty Years War :,,,,,51,,,,,,Hello Terry. The following item was checked in: The Thirty Years War . Thank you!
+S,default,CHECKIN,,01234567890,,Y,T,7315555678,user2@example.com,CPL,Centerville,721,2025-10-12 03:55:16,Learning SQL /,,,,,52,,11,1,,,CPL: The following items have been checked in: Learning SQL . Thank you.
+S,default,CHECKIN,,01234567890,,Y,T,7315555678,user2@example.com,CPL,Centerville,413,2025-10-12 03:55:18,The poems,,,,,52,,11,1,,,CPL: The following items have been checked in: The poems. Thank you.
+V,default,CHECKIN,,001,,T,R,7315551234,user@example.com,CPL,Centerville,877,2025-10-12 03:55:47,The bible :,,,,,51,,,,,,Hello [% borrower.firstname %]. The following item was checked in: The bible . Thank you!
+V,default,CHECKIN,,001,,T,R,7315551234,user@example.com,CPL,Centerville,20,2025-10-12 03:55:49,The Thirty Years War :,,,,,51,,,,,,Hello [% borrower.firstname %]. The following item was checked in: The Thirty Years War . Thank you!
 ```
 
 **Verification:**
@@ -94,7 +94,7 @@ Matched to: itemnumber=877, biblionumber=394, title="The bible :", returndate=20
 
 ### Before v1.1.9:
 ```csv
-V,default,CHECKIN,,001,,T,R,7325553663,...,CPL,Centerville,,,The Thirty Years War . Thank you,...
+V,default,CHECKIN,,001,,T,R,7315551234,...,CPL,Centerville,,,The Thirty Years War . Thank you,...
                                                                     ↑↑  ↑  ↑
                                                                itemsID  date  title (mangled)
                                                                (EMPTY) (EMPTY) (includes "Thank you")
@@ -108,7 +108,7 @@ V,default,CHECKIN,,001,,T,R,7325553663,...,CPL,Centerville,,,The Thirty Years Wa
 
 ### After v1.1.9:
 ```csv
-V,default,CHECKIN,,001,,T,R,7325553663,...,CPL,Centerville,20,2025-10-12 03:55:49,The Thirty Years War :,...
+V,default,CHECKIN,,001,,T,R,7315551234,...,CPL,Centerville,20,2025-10-12 03:55:49,The Thirty Years War :,...
                                                                     ↑↑  ↑                   ↑
                                                                itemsID  date              title (clean)
                                                                 (20)    (returndate)    (from database)

@@ -14,7 +14,7 @@ Version 1.1.7 is a major update that introduces the SMS::Send driver integration
 ### 1. SMS::Send Driver Integration (Major)
 - **New Driver**: SMS::Send::US::CirriusImpact
 - **Location**: `/usr/share/perl5/SMS/Send/US/CirriusImpact.pm`
-- **Phone Numbers**: Accepts both regional (7325861275) and international (+44...) formats
+- **Phone Numbers**: Accepts both regional (7315551234) and international (+44...) formats
 - **Installation**: Automated via `install_sms_driver.pl`
 - **Verification**: Built-in testing with `verify_installation.pl`
 
@@ -191,8 +191,8 @@ All fixes verified with real-world testing:
 ## 🌍 International Support
 
 The US::CirriusImpact driver works internationally:
-- ✅ US regional: 7325861275, (732) 586-1275
-- ✅ US international: +1 732 586 1275
+- ✅ US regional: 7315551234, (731) 555-1234
+- ✅ US international: +1 731 555 1234
 - ✅ UK: +44 20 1234 5678
 - ✅ Australia: +61 2 1234 5678
 - ✅ Any country code: +XX...
