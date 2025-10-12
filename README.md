@@ -323,7 +323,7 @@ See [LICENSE](LICENSE) for full details.
 ## 🙏 Credits
 
 **Developed by:** netechsys / Terry Rossio  
-**For:** ByWater Solutions  
+**For:** CirriusImpact 
 **Integration:** CirriusImpact Messaging API  
 **Platform:** Koha ILS
 
