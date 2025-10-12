@@ -255,7 +255,7 @@ For issues or questions:
 
 ## License
 
-Copyright 2025 ByWater Solutions
+Copyright 2025 CirriusImpact, LLC
 
 This program is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself.
