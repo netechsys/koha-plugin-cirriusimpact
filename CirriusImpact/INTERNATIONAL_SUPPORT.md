@@ -183,6 +183,6 @@ The actual delivery capability depends on CirriusImpact's service coverage. Cont
 
 ---
 
-**Version:** 1.0.0  
+**Version:** 1.0.1  
 **Updated:** October 11, 2025  
-**Plugin Version: 1.1.7
+**Plugin Version: 1.1.9
