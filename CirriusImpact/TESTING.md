@@ -79,7 +79,7 @@ cat ~/CirriusImpact_archive/*.csv | tail -5
 
 Expected CSV line:
 ```csv
-S,default,CHECKOUT,,01234567890,,Yossi,Teichman,7325861275,yossit@cgstogo.com,CPL,Centerville,413,2025-10-18 23:59:00,The poems,,,,,52,,29,1,,
+S,default,CHECKOUT,,01234567890,,Y,T,7325559876,yossit@cgstogo.com,CPL,Centerville,413,2025-10-18 23:59:00,The poems,,,,,52,,29,1,,
 ```
 
 ### 3. Test ODUE Messages
@@ -127,7 +127,7 @@ cat ~/CirriusImpact_archive/*.csv | grep "^V,"
 
 Example:
 ```csv
-V,default,CHECKOUT,,001,,Terry,Rossio,7325553663,tcr@cgstogo.com,CPL,Centerville,413,2025-10-18,The poems,,,,,51,,,,,
+V,default,CHECKOUT,,001,,T,R,7325553663,tcr@cgstogo.com,CPL,Centerville,413,2025-10-18,The poems,,,,,51,,,,,
 ```
 
 ### 5. Check for Errors
