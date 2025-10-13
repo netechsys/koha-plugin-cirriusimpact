@@ -35,14 +35,14 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.9";
+our $VERSION         = "1.1.13";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2025-10-12',
+    date_updated    => '2025-10-13',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -490,10 +490,12 @@ if (ref $data->{sms}->{to_numbers} eq 'ARRAY') {
     $data->{sms}->{to_numbers} = \@uniq;
 }
 
-# --- Backfill ODUE, CHECKOUT, and CHECKIN IDs/title/date if YAML couldn't provide them
+# --- Backfill ODUE, CHECKOUT, CHECKIN, PREDUE, and additional message types IDs/title/date if YAML couldn't provide them
 eval { $self->_ci_backfill_odue_identifiers($data) };
 eval { $self->_ci_backfill_checkout_identifiers($data) };
 eval { $self->_ci_backfill_checkin_identifiers($data) };
+eval { $self->_ci_backfill_predue_identifiers($data) };
+eval { $self->_ci_backfill_additional_identifiers($data) };
 
 # --- Fill SMS text if still blank
 if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
@@ -551,10 +553,12 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
 
             my $transport = lc($msgt->{transport} // '');
             my $letter_code = $msgt->{letter_code} || '';
-	    # With IDs merged (or not), make sure ODUE, CHECKOUT, and CHECKIN have identifiers + title/date
+	    # With IDs merged (or not), make sure ODUE, CHECKOUT, CHECKIN, PREDUE, and additional message types have identifiers + title/date
 		eval { $self->_ci_backfill_odue_identifiers($data) };
 		eval { $self->_ci_backfill_checkout_identifiers($data) };
 		eval { $self->_ci_backfill_checkin_identifiers($data) };
+		eval { $self->_ci_backfill_predue_identifiers($data) };
+		eval { $self->_ci_backfill_additional_identifiers($data) };
     
             my $commType  = $transport eq 'phone' ? 'V'
                           : $transport eq 'email' ? 'E'
@@ -656,6 +660,8 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
+                    eval { $self->_ci_backfill_predue_identifiers($data) };
+                    eval { $self->_ci_backfill_additional_identifiers($data) };
                 }
 
                 # ---- EMAIL (nested or flat)
@@ -699,6 +705,8 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
+                    eval { $self->_ci_backfill_predue_identifiers($data) };
+                    eval { $self->_ci_backfill_additional_identifiers($data) };
                 }
 
                 # ---- WHATSAPP (nested or flat)
@@ -734,6 +742,8 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
+                    eval { $self->_ci_backfill_predue_identifiers($data) };
+                    eval { $self->_ci_backfill_additional_identifiers($data) };
                 }
 
                 # ODUE suppression: skip phone if patron has SMS or Email (config-gated)
@@ -1903,5 +1913,393 @@ BEGIN {
     }
 }
 # --- end added v1.1.3 ---
+
+# --- helper: backfill PREDUE identifiers ---
+sub _ci_backfill_predue_identifiers {
+    my ($self, $data) = @_;
+    
+    # Determine which sections actually exist (not just what transport says)
+    # Check all possible transport sections
+    my @sections_to_check = ();
+    push @sections_to_check, ['call', $data->{call}] if $data->{call} && ref($data->{call}) eq 'HASH';
+    push @sections_to_check, ['sms', $data->{sms}] if $data->{sms} && ref($data->{sms}) eq 'HASH';
+    push @sections_to_check, ['email', $data->{email}] if $data->{email} && ref($data->{email}) eq 'HASH';
+    push @sections_to_check, ['whatsapp', $data->{whatsapp}] if $data->{whatsapp} && ref($data->{whatsapp}) eq 'HASH';
+    
+    # Process each section that exists
+    for my $section_info (@sections_to_check) {
+        my ($section_name, $section) = @$section_info;
+        
+        # Get letter code from the section
+        my $letter = $section->{meta} && $section->{meta}->{letter_code} ? $section->{meta}->{letter_code} : ($data->{meta} && $data->{meta}->{letter_code} || '');
+        
+        INFO("_ci_backfill_predue_identifiers: section=$section_name, letter=$letter");
+        
+        # Only work with PREDUE notices (PREDUE and PREDUEDGST)
+        next unless (($letter||'') =~ /^PREDUE/);
+
+        my $has_all = sub {
+            my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
+            INFO("has_all check: itemsID=" . ($section->{itemsID}||'') . ", biblionumber=" . ($section->{biblionumber}||'') . ", title=" . ($section->{title}||'') . " -> result=" . ($result ? '1' : '0'));
+            return $result;
+        };
+
+        # If we already have all data, nothing to do
+        return if $has_all->();
+
+        # Get patron ID
+        my $pid = $data->{PatronID}
+            || ($data->{patron} && $data->{patron}->{borrowernumber})
+            || ($data->{call} && $data->{call}->{PatronID})
+            || ($section->{PatronID});
+
+        INFO("Attempting to query upcoming due items for patron: " . ($pid || 'NO PID'));
+
+        if ($pid) {
+            INFO("Querying upcoming due items for borrowernumber=$pid");
+            
+            # Use direct SQL query to get upcoming due items (similar to advance_notices.pl)
+            my $dbh = C4::Context->dbh;
+            my $sql = q{
+                SELECT i.itemnumber, it.biblionumber, b.title, i.date_due, i.issue_id
+                FROM issues i
+                JOIN items it ON it.itemnumber = i.itemnumber
+                JOIN biblio b ON b.biblionumber = it.biblionumber
+                WHERE i.borrowernumber = ?
+                  AND i.date_due IS NOT NULL
+                ORDER BY i.date_due ASC
+                LIMIT 10
+            };
+            my $sth = $dbh->prepare($sql);
+            $sth->execute($pid);
+            my @upcoming_items;
+            while (my ($itemnumber, $biblionumber, $title, $date_due, $issue_id) = $sth->fetchrow_array) {
+                push @upcoming_items, {
+                    itemnumber => $itemnumber,
+                    biblionumber => $biblionumber,
+                    title => $title,
+                    date_due => $date_due,
+                    issue_id => $issue_id
+                };
+                INFO("Found item: $itemnumber, title: $title, due: $date_due");
+            }
+            $sth->finish;
+            
+            INFO("Found " . scalar(@upcoming_items) . " upcoming due items for patron $pid");
+            
+            if (@upcoming_items) {
+                # For PREDUE messages, populate the data directly from the database
+                # since the template variables are often empty
+                
+                # Check if this is a digest message (PREDUEDGST) or single message (PREDUE)
+                if ($letter =~ /DGST$/) {
+                    # For digest messages, use the first item but try to build a proper digest message
+                    my $matched_item = $upcoming_items[0];
+                    INFO("Using first upcoming item " . $matched_item->{itemnumber} . " for PREDUEDGST backfill");
+                    
+                    if ($matched_item) {
+                        my $title = $matched_item->{title} || '';
+                        $section->{itemsID}      ||= $matched_item->{itemnumber} || '';
+                        $section->{biblionumber} ||= $matched_item->{biblionumber} || '';
+                        $section->{title}        ||= $title;
+                        $section->{date}         ||= $matched_item->{date_due} || '';
+                        
+                        my $message_id = $section->{meta}->{message_id} || $data->{message_type}->{message_id} || 0;
+                        INFO("Backfill PREDUEDGST: Set title to '$title' for message $message_id section=$section_name");
+                        
+                        # For digest messages, try to build a proper message with all items
+                        if ($section->{text} && $section->{text} =~ /is due \./) {
+                            my $new_text = $section->{text};
+                            if (scalar(@upcoming_items) > 1) {
+                                # Build digest message with multiple items
+                                my @titles = map { $_->{title} } @upcoming_items;
+                                my $titles_str = join('; ', @titles);
+                                $new_text =~ s/is due \./are due $matched_item->{date_due}/;
+                                $new_text =~ s/:\s+are due/: $titles_str are due/;
+                            } else {
+                                # Single item message
+                                $new_text =~ s/is due \./is due $matched_item->{date_due}/;
+                                $new_text =~ s/:\s+is due/: $title is due/;
+                            }
+                            $section->{text} = $new_text;
+                            INFO("Updated digest message text to: '$new_text'");
+                        }
+                    }
+                } else {
+                    # For single PREDUE messages, use the first item
+                    my $matched_item = $upcoming_items[0];
+                    INFO("Using first upcoming item " . $matched_item->{itemnumber} . " for PREDUE backfill");
+                    
+                    if ($matched_item) {
+                        my $title = $matched_item->{title} || '';
+                        $section->{itemsID}      ||= $matched_item->{itemnumber} || '';
+                        $section->{biblionumber} ||= $matched_item->{biblionumber} || '';
+                        $section->{title}        ||= $title;
+                        $section->{date}         ||= $matched_item->{date_due} || '';
+                        
+                        my $message_id = $section->{meta}->{message_id} || $data->{message_type}->{message_id} || 0;
+                        INFO("Backfill PREDUE: Set title to '$title' for message $message_id section=$section_name");
+                        
+                        # Also try to update the message text if it's empty or has empty variables
+                        if ($section->{text} && $section->{text} =~ /is due \./) {
+                            my $new_text = $section->{text};
+                            $new_text =~ s/is due \./is due $matched_item->{date_due}/;
+                            $new_text =~ s/:\s+is due/: $title is due/;
+                            $section->{text} = $new_text;
+                            INFO("Updated message text to: '$new_text'");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return;
+}
+
+# --- helper: backfill additional message types ---
+sub _ci_backfill_additional_identifiers {
+    my ($self, $data) = @_;
+    
+    # Determine which sections actually exist (not just what transport says)
+    # Check all possible transport sections
+    my @sections_to_check = ();
+    push @sections_to_check, ['call', $data->{call}] if $data->{call} && ref($data->{call}) eq 'HASH';
+    push @sections_to_check, ['sms', $data->{sms}] if $data->{sms} && ref($data->{sms}) eq 'HASH';
+    push @sections_to_check, ['email', $data->{email}] if $data->{email} && ref($data->{email}) eq 'HASH';
+    push @sections_to_check, ['whatsapp', $data->{whatsapp}] if $data->{whatsapp} && ref($data->{whatsapp}) eq 'HASH';
+    
+    # Process each section that exists
+    for my $section_info (@sections_to_check) {
+        my ($section_name, $section) = @$section_info;
+        
+        # Get letter code from the section
+        my $letter = $section->{meta} && $section->{meta}->{letter_code} ? $section->{meta}->{letter_code} : ($data->{meta} && $data->{meta}->{letter_code} || '');
+        
+        INFO("_ci_backfill_additional_identifiers: section=$section_name, letter=$letter");
+        
+        # Only work with the new message types
+        next unless (($letter||'') =~ /^(HOLD_CHANGED|HOLD_REMINDER|MEMBERSHIP_EXPIRY|MEMBERSHIP_RENEWED|RENEWAL|WELCOME|ACCOUNT_CREDIT|ACCOUNT_DEBIT|ACCOUNT_PAYMENT|ACCOUNT_WRITEOFF|ACCOUNTS_SUMMARY|HOLDPLACED|HOLDPLACED_PATRON)$/);
+
+        my $has_all = sub {
+            my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
+            INFO("has_all check: itemsID=" . ($section->{itemsID}||'') . ", biblionumber=" . ($section->{biblionumber}||'') . ", title=" . ($section->{title}||'') . " -> result=" . ($result ? '1' : '0'));
+            return $result;
+        };
+
+        # If we already have all data, nothing to do
+        return if $has_all->();
+
+        # Get patron ID
+        my $pid = $data->{PatronID}
+            || ($data->{patron} && $data->{patron}->{borrowernumber})
+            || ($data->{call} && $data->{call}->{PatronID})
+            || ($section->{PatronID});
+
+        INFO("Attempting to query data for patron: " . ($pid || 'NO PID') . " for message type: $letter");
+
+        if ($pid) {
+            my $dbh = C4::Context->dbh;
+            my $matched_item;
+            
+            # Handle different message types
+            if ($letter =~ /^HOLD_(CHANGED|REMINDER)$/) {
+                # For HOLD messages, query the reserves table
+                INFO("Querying holds for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                    FROM reserves r
+                    JOIN biblio b ON b.biblionumber = r.biblionumber
+                    WHERE r.borrowernumber = ?
+                      AND r.found IS NULL
+                    ORDER BY r.reservedate DESC
+                    LIMIT 1
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $reserve_id,
+                        biblionumber => $biblionumber,
+                        title => $title,
+                        date => $reservedate,
+                        expirationdate => $expirationdate
+                    };
+                    INFO("Found hold: $reserve_id, title: $title, reserved: $reservedate");
+                }
+                $sth->finish;
+                
+            } elsif ($letter =~ /^MEMBERSHIP_(EXPIRY|RENEWED)$/) {
+                # For membership messages, query the borrowers table
+                INFO("Querying membership info for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT b.borrowernumber, b.cardnumber, b.firstname, b.surname, b.dateexpiry, b.dateenrolled
+                    FROM borrowers b
+                    WHERE b.borrowernumber = ?
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($borrowernumber, $cardnumber, $firstname, $surname, $dateexpiry, $dateenrolled) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $borrowernumber,
+                        biblionumber => $borrowernumber,
+                        title => "$firstname $surname",
+                        date => $dateexpiry,
+                        cardnumber => $cardnumber,
+                        dateenrolled => $dateenrolled
+                    };
+                    INFO("Found membership: $borrowernumber, name: $firstname $surname, expires: $dateexpiry");
+                }
+                $sth->finish;
+                
+            } elsif ($letter eq 'RENEWAL') {
+                # For renewal messages, query current issues
+                INFO("Querying current issues for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT i.itemnumber, it.biblionumber, b.title, i.date_due, i.issue_id
+                    FROM issues i
+                    JOIN items it ON it.itemnumber = i.itemnumber
+                    JOIN biblio b ON b.biblionumber = it.biblionumber
+                    WHERE i.borrowernumber = ?
+                    ORDER BY i.date_due ASC
+                    LIMIT 1
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($itemnumber, $biblionumber, $title, $date_due, $issue_id) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $itemnumber,
+                        biblionumber => $biblionumber,
+                        title => $title,
+                        date => $date_due,
+                        issue_id => $issue_id
+                    };
+                    INFO("Found renewal item: $itemnumber, title: $title, due: $date_due");
+                }
+                $sth->finish;
+                
+            } elsif ($letter eq 'WELCOME') {
+                # For welcome messages, query borrower info
+                INFO("Querying borrower info for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT b.borrowernumber, b.cardnumber, b.firstname, b.surname, b.dateenrolled, b.branchcode
+                    FROM borrowers b
+                    WHERE b.borrowernumber = ?
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($borrowernumber, $cardnumber, $firstname, $surname, $dateenrolled, $branchcode) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $borrowernumber,
+                        biblionumber => $borrowernumber,
+                        title => "$firstname $surname",
+                        date => $dateenrolled,
+                        cardnumber => $cardnumber,
+                        branchcode => $branchcode
+                    };
+                    INFO("Found welcome patron: $borrowernumber, name: $firstname $surname, enrolled: $dateenrolled");
+                }
+                $sth->finish;
+                
+            } elsif ($letter =~ /^ACCOUNT_(CREDIT|DEBIT|PAYMENT|WRITEOFF)$/) {
+                # For account messages, query accountlines table
+                INFO("Querying account info for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT al.accountlines_id, al.borrowernumber, al.amount, al.description, al.date, al.amountoutstanding
+                    FROM accountlines al
+                    WHERE al.borrowernumber = ?
+                    ORDER BY al.date DESC
+                    LIMIT 1
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($accountlines_id, $borrowernumber, $amount, $description, $date, $amountoutstanding) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $accountlines_id,
+                        biblionumber => $borrowernumber,
+                        title => $description || "Account transaction",
+                        date => $date,
+                        amount => $amount,
+                        amountoutstanding => $amountoutstanding
+                    };
+                    INFO("Found account transaction: $accountlines_id, amount: $amount, description: $description");
+                }
+                $sth->finish;
+                
+            } elsif ($letter eq 'ACCOUNTS_SUMMARY') {
+                # For accounts summary, query total outstanding balance
+                INFO("Querying accounts summary for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT SUM(al.amountoutstanding) as total_balance, COUNT(al.accountlines_id) as transaction_count
+                    FROM accountlines al
+                    WHERE al.borrowernumber = ? AND al.amountoutstanding > 0
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($total_balance, $transaction_count) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $pid,
+                        biblionumber => $pid,
+                        title => "Account Summary",
+                        date => scalar(localtime()),
+                        total_balance => $total_balance || 0,
+                        transaction_count => $transaction_count || 0
+                    };
+                    INFO("Found accounts summary: total balance: $total_balance, transactions: $transaction_count");
+                }
+                $sth->finish;
+                
+            } elsif ($letter =~ /^HOLDPLACED(_PATRON)?$/) {
+                # For hold placed messages, query the most recent hold
+                INFO("Querying recent hold for borrowernumber=$pid");
+                my $sql = q{
+                    SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                    FROM reserves r
+                    JOIN biblio b ON b.biblionumber = r.biblionumber
+                    WHERE r.borrowernumber = ?
+                    ORDER BY r.reservedate DESC
+                    LIMIT 1
+                };
+                my $sth = $dbh->prepare($sql);
+                $sth->execute($pid);
+                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate) = $sth->fetchrow_array) {
+                    $matched_item = {
+                        itemnumber => $reserve_id,
+                        biblionumber => $biblionumber,
+                        title => $title,
+                        date => $reservedate,
+                        expirationdate => $expirationdate
+                    };
+                    INFO("Found hold placed: $reserve_id, title: $title, reserved: $reservedate");
+                }
+                $sth->finish;
+            }
+            
+            # Populate the section with found data
+            if ($matched_item) {
+                my $title = $matched_item->{title} || '';
+                $section->{itemsID}      ||= $matched_item->{itemnumber} || '';
+                $section->{biblionumber} ||= $matched_item->{biblionumber} || '';
+                $section->{title}        ||= $title;
+                $section->{date}         ||= $matched_item->{date} || '';
+                
+                my $message_id = $section->{meta}->{message_id} || $data->{message_type}->{message_id} || 0;
+                INFO("Backfill $letter: Set title to '$title' for message $message_id section=$section_name");
+                
+                # Try to update message text if it has empty variables
+                if ($section->{text} && $section->{text} =~ /(is due|expires|renewed|welcome)/i) {
+                    my $new_text = $section->{text};
+                    # Replace common empty patterns
+                    $new_text =~ s/:\s+is due/: $title is due/;
+                    $new_text =~ s/:\s+expires/: $title expires/;
+                    $new_text =~ s/:\s+renewed/: $title renewed/;
+                    $new_text =~ s/:\s+welcome/: $title welcome/;
+                    $section->{text} = $new_text;
+                    INFO("Updated $letter message text to: '$new_text'");
+                }
+            }
+        }
+    }
+    return;
+}
 
 1;
