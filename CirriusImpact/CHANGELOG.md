@@ -1,3 +1,67 @@
+## 1.1.13 - 2025-10-13
+
+### Account and Hold Message Support
+- **NEW**: Added backfill support for 7 additional message types: ACCOUNT_CREDIT, ACCOUNT_DEBIT, ACCOUNT_PAYMENT, ACCOUNT_WRITEOFF, ACCOUNTS_SUMMARY, HOLDPLACED, HOLDPLACED_PATRON
+- **Database Integration**: Enhanced `_ci_backfill_additional_identifiers()` to query accountlines and reserves tables
+- **Account Messages**: Queries `accountlines` table for transaction data, amounts, descriptions, and balances
+- **Hold Messages**: Queries `reserves` table for hold placement information and expiration dates
+- **Automatic Population**: All new message types automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields
+- **Coverage**: Backfill applies to all transport types (SMS, Phone, Email, WhatsApp)
+
+### Template Examples Added
+- **Documentation**: Added comprehensive templates for all 7 new message types in QUICKSTART.md and NOTICE_EXAMPLES.md
+- **Phone Support**: Added phone templates for all new message types with proper greeting and call-to-action
+- **Copy-Paste Ready**: All templates include proper YAML markers and variable usage
+- **Expected Output**: Added detailed examples showing exactly what messages will look like
+- **Template Variables**: Added support for account-specific variables (amount, description, balance, transaction_count)
+
+### Implementation Details
+- **Location**: Enhanced function at line 2075 in `CirriusImpact.pm`
+- **Integration**: Called after each transport section is created (lines 498, 561, 664, 709, 746)
+- **SQL Queries**: 
+  - Account: `SELECT al.accountlines_id, al.amount, al.description FROM accountlines al...`
+  - Summary: `SELECT SUM(al.amountoutstanding), COUNT(al.accountlines_id) FROM accountlines al...`
+  - Hold: `SELECT r.reserve_id, r.biblionumber, b.title FROM reserves r JOIN biblio b...`
+- **Error Handling**: Robust error handling and logging for all new message types
+- **Debug Logging**: Comprehensive logging for troubleshooting
+
+### Complete Message Type Coverage
+- **Total Support**: Plugin now supports 20 different message types
+- **Core Circulation**: HOLD, CHECKOUT, CHECKIN, ODUE, PREDUE (with digest variants)
+- **Additional Types**: HOLD_CHANGED, HOLD_REMINDER, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, RENEWAL, WELCOME
+- **Account & Hold**: ACCOUNT_CREDIT, ACCOUNT_DEBIT, ACCOUNT_PAYMENT, ACCOUNT_WRITEOFF, ACCOUNTS_SUMMARY, HOLDPLACED, HOLDPLACED_PATRON
+- **Production Ready**: All message types have automatic data population and comprehensive documentation
+
+## 1.1.12 - 2025-10-13
+
+### PREDUE Message Support
+- **NEW**: Added `_ci_backfill_predue_identifiers()` function for PREDUE and PREDUEDGST notices
+- **FIXED**: PREDUE messages now populate `itemsID`, `biblionumber`, `title`, and `date` fields
+- **Query**: Uses direct SQL to fetch upcoming due items from `issues` table
+- **Digest Support**: Handles both single PREDUE and digest PREDUEDGST message types
+- **Message Correction**: Automatically fixes empty template variables in message text
+- **Multi-Item Display**: For digest messages, shows all items in message text even if CSV shows first item
+- **Coverage**: Backfill applies to all transport types (SMS, Phone, Email, WhatsApp)
+
+### Template Examples Added
+- **Documentation**: Added complete PREDUE templates to QUICKSTART.md and NOTICE_EXAMPLES.md
+- **Copy-Paste Ready**: All templates include proper YAML markers and variable usage
+- **Digest Logic**: Templates handle both single items and multiple items with proper conditional logic
+- **Fallback Support**: Simple templates work even when Koha template variables are empty
+
+### Implementation Details
+- **Location**: New function at line 1912 in `CirriusImpact.pm`
+- **Integration**: Called after each transport section is created (lines 497, 559, 661, 705, 741)
+- **SQL Query**: `SELECT i.itemnumber, it.biblionumber, b.title, i.date_due FROM issues i...`
+- **Message Text Fix**: Regex replacement for empty variables in digest messages
+- **Debug Logging**: Comprehensive logging for troubleshooting
+
+### Testing Status
+- ✅ PREDUE messages: Working perfectly with automatic backfill
+- ✅ PREDUEDGST messages: Working perfectly with all items in message text
+- ✅ CSV fields: All populated correctly (itemsID, title, date, biblionumber)
+- ✅ Message text: Automatically corrected to show all items for digest messages
+
 ## 1.1.9 - 2025-10-12
 
 ### CHECKIN Message Support

@@ -202,6 +202,309 @@ call:
 - WhatsApp is configured as an SMS notice using the `whatsapp:` section.
 - CHECKIN notices automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields by extracting the title from the rendered message and matching it to recent check-ins in the database (last 24 hours).
 
+#### PREDUE (Upcoming Due) Notice Examples
+
+**PREDUE (Single Item) - SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew."
+---
+```
+
+**PREDUE (Single Item) - Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call 7315551234."
+---
+```
+
+**PREDUEDGST (Digest) - SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% IF issues && issues.size > 1 %][% issues.size %] items due soon: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Due [% issues.0.date_due | $KohaDates %][% ELSIF issues && issues.size == 1 %][% issues.0.biblio.title %] is due [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] is due [% issue.date_due | $KohaDates %][% END %]. Please return or renew."
+---
+```
+
+**PREDUEDGST (Digest) - Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF issues && issues.size > 1 %]You have [% issues.size %] items due soon: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Due [% issues.0.date_due | $KohaDates %][% ELSIF issues && issues.size == 1 %][% issues.0.biblio.title %] is due [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] is due [% issue.date_due | $KohaDates %][% END %]. Please return or renew. Call 7315551234."
+---
+```
+
+**Note:** 
+- PREDUE notices automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields by querying the database for upcoming due items.
+- For digest messages (PREDUEDGST), the message text will show all items even if the template variables are empty.
+- Use `advance_notices.pl` to generate PREDUE messages: `/usr/share/koha/bin/cronjobs/advance_notices.pl -c -v`
+
+#### Additional Message Types
+
+**HOLD_CHANGED (Hold Status Changed) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Your hold for [% biblio.title %] has changed status. Check your account for details."
+---
+```
+
+**HOLD_CHANGED (Hold Status Changed) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold for [% biblio.title %] has changed status. Please check your account for details. Call 7315551234."
+---
+```
+
+**HOLD_CHANGEDGST (Hold Status Changed - Digest) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %][% holds.size %] holds have changed status: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Your hold for [% biblio.title %] has changed status[% END %]. Check your account for details."
+---
+```
+
+**HOLD_CHANGEDGST (Hold Status Changed - Digest) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds && holds.size > 1 %][% holds.size %] holds have changed status: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]Your hold for [% biblio.title %] has changed status[% END %]. Please check your account for details. Call 7315551234."
+---
+```
+
+**HOLD_REMINDER (Hold Reminder) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Reminder: You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
+---
+```
+
+**HOLD_REMINDER (Hold Reminder) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder: You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %]. Call 7315551234."
+---
+```
+
+**HOLD_REMINDERGST (Hold Reminder - Digest) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Reminder: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Expires [% holds.0.expirationdate | $KohaDates %][% ELSE %]You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %][% END %]."
+---
+```
+
+**HOLD_REMINDERGST (Hold Reminder - Digest) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Expires [% holds.0.expirationdate | $KohaDates %][% ELSE %]You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %][% END %]. Call 7315551234."
+---
+```
+
+**MEMBERSHIP_EXPIRY (Membership Expiring) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Your membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services."
+---
+```
+
+**MEMBERSHIP_EXPIRY (Membership Expiring) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call 7315551234."
+---
+```
+
+**MEMBERSHIP_RENEWED (Membership Renewed) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Your membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
+---
+```
+
+**MEMBERSHIP_RENEWED (Membership Renewed) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you! Call 7315551234."
+---
+```
+
+**RENEWAL (Item Renewed) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]."
+---
+```
+
+**RENEWAL (Item Renewed) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call 7315551234."
+---
+```
+
+**RENEWALGST (Item Renewed - Digest) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% IF issues && issues.size > 1 %][% issues.size %] items have been renewed: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. New due date: [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %][% END %]."
+---
+```
+
+**RENEWALGST (Item Renewed - Digest) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF issues && issues.size > 1 %][% issues.size %] items have been renewed: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. New due date: [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %][% END %]. Call 7315551234."
+---
+```
+
+**WELCOME (New Member) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Welcome to [% branch.branchname %]! Your library card number is [% borrower.cardnumber %]. Visit us soon!"
+---
+```
+
+**WELCOME (New Member) - Phone:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. Welcome to [% branch.branchname %]! Your library card number is [% borrower.cardnumber %]. We're excited to have you as a member. Call 7315551234."
+---
+```
+
+#### Account and Hold Message Types
+
+**ACCOUNT_CREDIT (Account Credit) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Credit of $[% account.amount %] applied to your account. Description: [% account.description %]. New balance: $[% account.amountoutstanding %]."
+---
+```
+
+**ACCOUNT_DEBIT (Account Debit) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Charge of $[% account.amount %] added to your account. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
+---
+```
+
+**ACCOUNT_PAYMENT (Payment Received) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Payment of $[% account.amount %] received. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
+---
+```
+
+**ACCOUNT_WRITEOFF (Account Write-off) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Account write-off of $[% account.amount %] processed. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
+---
+```
+
+**ACCOUNTS_SUMMARY (Account Summary) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Account Summary - Outstanding balance: $[% account.total_balance %]. [% account.transaction_count %] outstanding transactions. Please pay at your convenience."
+---
+```
+
+**HOLDPLACED (Hold Placed) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Hold placed for [% biblio.title %]. You will be notified when ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
+---
+```
+
+**HOLDPLACED_PATRON (Hold Placed - Patron) - SMS:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Hold placed for [% biblio.title %]. You will be notified when ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
+---
+```
+
+**Note:** All additional message types automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields by querying the appropriate database tables (reserves, borrowers, issues, accountlines).
+
 ### Step 7: Test Message Processing
 
 - Create a few Hold Reservations and Checkin the items to create a Hold Notification.

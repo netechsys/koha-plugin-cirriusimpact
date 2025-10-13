@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-Version: **1.1.9** (2025-10-12)
+Version: **1.1.13** (2025-10-13)
 
 ## Overview
 
