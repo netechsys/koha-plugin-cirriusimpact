@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-[![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.9)
+[![Version](https://img.shields.io/badge/version-1.1.16-blue.svg)](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.16)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 [![Koha](https://img.shields.io/badge/Koha-Compatible-orange.svg)](https://koha-community.org/)
 
@@ -11,7 +11,7 @@
 ## 📋 Table of Contents
 
 - [Features](#features)
-- [What's New in v1.1.9](#whats-new-in-v119)
+- [What's New in v1.1.16](#whats-new-in-v116)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Documentation](#documentation)
@@ -33,9 +33,16 @@
 
 ### 📬 **Message Types**
 - **HOLD** - Hold ready notifications (digest)
+- **HOLDDGST** - Hold digest notifications (automatic grouping)
 - **CHECKOUT** - Item checkout confirmations (digest)
-- **CHECKIN** - Item return confirmations (digest) 🆕
+- **CHECKIN** - Item return confirmations (digest)
 - **ODUE/ODUE2/ODUE3** - Overdue reminders (single-item)
+- **PREDUE/PREDUEDGST** - Pre-due notifications (digest)
+- **HOLDPLACED** - Hold placement confirmations
+- **HOLDPLACED_PATRON** - Hold confirmation notices
+- **HOLD_CHANGED** - Hold status change notifications
+- **HOLD_REMINDER** - Hold reminder notifications
+- **RENEWAL** - Item renewal notifications
 
 ### 🔄 **Intelligent Processing**
 - **Digest Support** - Combine multiple items into single messages
@@ -43,44 +50,49 @@
 - **Patron Preferences** - Respects patron messaging preferences
 - **ODUE Suppression** - Skip phone ODUE if patron has SMS/Email enabled
 - **Auto-Population** - Automatically fills CSV fields (itemsID, title, date, etc.)
+- **Module Assignment** - Correct template module assignments (HOLD → reserves, ODUE → circulation)
 
 ### 📊 **CSV Export**
 - **26 Complete Fields** - All required data for CirriusImpact API
 - **Automatic Backfilling** - Enriches message data with item details
 - **Title Matching** - Extracts and matches titles from messages
 - **SFTP Upload** - Automated transfer to CirriusImpact
-- **Validated Output** - 546 data points tested across 21 messages
+- **Configurable messageText** - Optional inclusion of full message content
+- **Validated Output** - Comprehensive testing across all message types
 
 ---
 
-## 🆕 What's New in v1.1.9
+## 🆕 What's New in v1.1.16
 
-### **CHECKIN Message Support**
-✅ New `_ci_backfill_checkin_identifiers()` function  
-✅ Auto-populates: `itemsID`, `biblionumber`, `title`, `date` (returndate)  
-✅ Title extraction from rendered messages  
-✅ Database matching to `old_issues` table (24-hour window)  
-✅ Works for all transports: SMS, Phone, Email, WhatsApp
+### **Critical Module Assignment Fix**
+✅ **FIXED**: HOLD templates now correctly assigned to 'reserves' module instead of 'circulation' module  
+✅ **ROOT CAUSE**: Phone messages were not being generated due to incorrect module assignments  
+✅ **SOLUTION**: Updated install_message_templates.pl with correct module assignments:
+- HOLD* templates → 'reserves' module
+- ODUE* templates → 'circulation' module (unchanged)
+- PREDUE* templates → 'circulation' module (unchanged)
 
-### **ODUE Template Fix**
-✅ Simplified ODUE templates to avoid Koha TT `.size` method errors  
-✅ Single-item format (one message per overdue item)  
-✅ Updated ODUE, ODUE2, ODUE3 templates  
-✅ Phone suppression working correctly when patron has SMS enabled
+### **Template Coverage Improvements**
+✅ **ADDED**: Missing HOLDPLACED and HOLDPLACED_PATRON templates  
+✅ **ADDED**: HOLD_SLIP_EMAIL template in circulation module  
+✅ **COMPLETE**: All default Koha message types now have CirriusImpact templates  
+✅ **ENHANCED**: Direct database connection fallback for installer script  
+✅ **TESTED**: Verified phone messaging now works correctly for patron 51
 
-### **Documentation Updates**
-✅ Updated `QUICKSTART.md` with CHECKIN + simplified ODUE templates  
-✅ Updated `NOTICE_EXAMPLES.md` with 6 CHECKIN options  
-✅ Added comprehensive `TESTING_RESULTS_v1.1.9.md`  
-✅ Updated `CHANGELOG.md` with all v1.1.9 changes
+### **Message Template Installer**
+✅ **NEW**: Added `install_message_templates.pl` script for automatic template installation  
+✅ **30+ Templates**: Installs pre-configured templates for all supported message types  
+✅ **Complete Coverage**: Includes HOLD, CHECKOUT, CHECKIN, ODUE, PREDUE, and membership templates  
+✅ **SMS & Phone**: All templates include both SMS and Phone transport versions  
+✅ **CirriusImpact Ready**: All templates include proper YAML markers and CirriusImpact integration  
+✅ **Easy Installation**: Single command installs all templates: `sudo perl install_message_templates.pl`
 
-### **Complete Testing**
-✅ **21 messages tested** across 4 notice types  
-✅ **HOLD**: 4 messages ✓  
-✅ **CHECKOUT**: 4 messages ✓  
-✅ **CHECKIN**: 4 messages ✓  
-✅ **ODUE**: 9 messages ✓  
-✅ **All CSV fields validated** (546 data points)
+### **MessageText Configuration Option**
+✅ **NEW**: Added configuration checkbox to enable/disable messageText column in CSV output  
+✅ **Flexible Output**: Users can choose whether to include full message content in CSV files  
+✅ **Configuration UI**: Added "Include messageText column in CSV output" checkbox in plugin configuration  
+✅ **Conditional Processing**: CSV generation now checks configuration before including messageText column  
+✅ **Backward Compatible**: Default behavior maintains current functionality
 
 ---
 
@@ -90,17 +102,21 @@
 
 ```bash
 # 1. Download the plugin
-wget https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.9.zip
+wget https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.16.zip
 
 # 2. Install in Koha
 # Upload via: Administration → Plugins → Upload plugin
 
 # 3. Install SMS drivers
 cd /var/lib/koha/[INSTANCE]/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/
-perl install_sms_driver.pl
+sudo perl install_sms_driver.pl
 
-# 4. Configure Koha
+# 4. Install message templates (recommended)
+sudo perl install_message_templates.pl
+
+# 5. Configure Koha
 # Set: SMSSendDriver = 'US::CirriusImpact'
+# Set: PhoneSendDriver = 'US::CirriusImpact'
 # (Administration → Global System Preferences → Patrons)
 ```
 
@@ -114,26 +130,17 @@ perl install_sms_driver.pl
    - SFTP Path
    - Archive Directory
 3. Enable: **Skip calling ODUE if patron has SMS or Email** ✓
-4. Click **Save Configuration**
+4. Enable: **Include messageText column in CSV output** (optional) ✓
+5. Click **Save Configuration**
 
-### **Add Notice Templates** (2 minutes)
+### **Test Installation** (2 minutes)
 
-Copy templates from [`QUICKSTART.md`](CirriusImpact/QUICKSTART.md) into:
-- **Tools → Notices & Slips**
-- Create separate notices for SMS and Phone transports
+1. Create a test hold for a patron with phone number
+2. Run: `/usr/share/koha/bin/cronjobs/process_message_queue.pl`
+3. Check: `/var/lib/koha/[INSTANCE]/CirriusImpact_archive/` for CSV files
+4. Verify: Phone messages are generated correctly
 
-**Example SMS HOLD Template:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-holds: [% holds_list %]
-sms:
-  text: "[% branch.branchcode %]: [% IF holds.size > 1 %][% holds.size %] holds ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Hold ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]"
----
-```
-
-**Ready to test!** 🎉
+**Ready to use!** 🎉
 
 ---
 
@@ -164,13 +171,19 @@ sms:
 - **Expiration dates** included automatically
 - **Example**: "CPL: 3 holds ready: Learning SQL; The poems; The bible. Pickup by 10/20/2025"
 
+### **HOLDDGST Notices** (Automatic Digest)
+- **Automatic grouping** of multiple individual HOLDDGST messages
+- **Combined titles** with semicolon separation
+- **Updated message text** to show digest format
+- **Example**: "You have 2 holds ready for pickup: Title 1; Title 2. Pickup by 10/20/2025"
+
 ### **CHECKOUT Notices** (Digest Format)
 - **Multiple checkouts** combined into one message
 - **Due dates** shown for all items
 - **Automatic itemsID population** via backfill
 - **Example**: "Checked out 3 items: Learning SQL; The poems; The bible. All due 10/25/2025"
 
-### **CHECKIN Notices** (Digest Format) 🆕
+### **CHECKIN Notices** (Digest Format)
 - **Multiple check-ins** combined into one message
 - **Return confirmation** for patron peace of mind
 - **Automatic field population** (itemsID, title, date)
@@ -182,60 +195,62 @@ sms:
 - **Smart suppression**: Skip phone if patron has SMS
 - **Example**: "CPL OVERDUE: Learning SQL due 10/05/2025. Return now!"
 
+### **PREDUE Notices** (Digest Format)
+- **Pre-due notifications** before items become overdue
+- **Multiple items** combined into single message
+- **Due date reminders** for upcoming returns
+- **Example**: "Reminder: 2 items due soon: Title 1; Title 2. Please return or renew."
+
 ---
 
 ## ✅ Testing & Validation
 
 ### **Production Tested**
-- ✅ **21 messages** processed successfully
-- ✅ **4 notice types** (HOLD, CHECKOUT, CHECKIN, ODUE)
-- ✅ **2 transports** (SMS + Phone)
+- ✅ **All message types** processed successfully
+- ✅ **Multiple notice types** (HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE, PREDUE)
+- ✅ **All transports** (SMS + Phone + Email)
 - ✅ **26 CSV fields** validated
-- ✅ **546 data points** verified
+- ✅ **Module assignments** verified (HOLD → reserves, ODUE → circulation)
+- ✅ **Phone messaging** working correctly
 
-### **Test Results**
-
-| Notice Type | Messages | Patrons | Status |
-|-------------|----------|---------|--------|
-| HOLD | 4 | 2 | ✅ Perfect |
-| CHECKOUT | 4 | 2 | ✅ Perfect |
-| CHECKIN | 4 | 2 | ✅ Perfect |
-| ODUE | 9 | 1 | ✅ Perfect |
-| **Total** | **21** | **2** | ✅ **Production Ready** |
+### **Critical Fixes Validated**
+- ✅ **HOLD templates** correctly assigned to 'reserves' module
+- ✅ **Phone messages** now generated for HOLD notifications
+- ✅ **Template installer** working with direct database connection
+- ✅ **Complete template coverage** for all message types
 
 ### **CSV Field Validation**
 All 26 fields verified:
 - ✅ `commType`, `language`, `notificationType`, `notificationLevel`
-- ✅ `patronBarCode`, `patronFirstName`, `patronLastName`, `phone`, `email`
+- ✅ `patronBarCode`, `STAB_userSalutation`, `patronFirstName`, `patronLastName`, `phone`, `email`
 - ✅ `branch`, `branchname`
 - ✅ `itemsID`, `biblionumber`, `title`, `date`
 - ✅ `DeliveryOptionID`, `LanguageID`, `NotificationTypeID`, `ReportingOrgID`
 - ✅ `PatronID`, `ItemRecordID`, `RequestID`, `TxnID`
 - ✅ `PickupAreaDescription`, `AccountBalance`
-- ✅ `messageText` (SMS text or Phone script)
-
-See [TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md) for complete details.
+- ✅ `messageText` (SMS text or Phone script) - **Configurable**
 
 ---
 
 ## 📥 Download
 
-### **Latest Release: v1.1.9**
+### **Latest Release: v1.1.16**
 
 **Direct Download:**
-- **GitHub Release**: [v1.1.9](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.9)
-- **Archive**: [Download ZIP](https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.9.zip)
+- **GitHub Release**: [v1.1.16](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.16)
+- **Archive**: [Download ZIP](https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.16.zip)
 
 **What's Included:**
-- 1 main plugin file (`CirriusImpact.pm` v1.1.9)
+- 1 main plugin file (`CirriusImpact.pm` v1.1.16)
 - 2 SMS drivers (US::CirriusImpact, CirriusImpact)
-- 12 documentation files
+- 1 message template installer (`install_message_templates.pl`)
+- 12+ documentation files
 - 2 installation scripts
 - 1 configuration template
 
-**Package Size:** 81KB  
-**Files:** 28 total  
-**Release Date:** October 12, 2025
+**Package Size:** 104KB  
+**Files:** 30+ total  
+**Release Date:** October 14, 2025
 
 ---
 
@@ -247,6 +262,7 @@ See [TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md) for com
   - `Net::SFTP::Foreign` (for SFTP upload)
   - `YAML::XS` (for template parsing)
   - `SMS::Send` (for SMS functionality)
+  - `DBI` (for database connections)
 - **Permissions**: Write access to plugin directories
 
 ---
@@ -261,6 +277,8 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
   text: "Your message with [% variables %]"
+call:
+  script: "Hello [% borrower.firstname %]. Your message with [% variables %]"
 ---
 ```
 
@@ -294,6 +312,17 @@ Use simplified single-item ODUE templates without `.size` calls. Templates updat
 - HOLD, CHECKOUT, CHECKIN still use digest format
 - All message types work correctly with this approach
 
+### **Module Assignment Requirements**
+
+**Issue:**  
+HOLD templates must be assigned to the 'reserves' module, not 'circulation' module.
+
+**Solution:**  
+The `install_message_templates.pl` script now correctly assigns:
+- HOLD* templates → 'reserves' module
+- ODUE* templates → 'circulation' module
+- PREDUE* templates → 'circulation' module
+
 ---
 
 ## 🤝 Support
@@ -301,6 +330,7 @@ Use simplified single-item ODUE templates without `.size` calls. Templates updat
 ### **Documentation**
 - **Quick Start**: [QUICKSTART.md](CirriusImpact/QUICKSTART.md)
 - **Examples**: [NOTICE_EXAMPLES.md](CirriusImpact/NOTICE_EXAMPLES.md)
+- **Installation**: [INSTALL.md](CirriusImpact/INSTALL.md)
 - **Testing**: [TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md)
 
 ### **Troubleshooting**
@@ -331,12 +361,12 @@ See [LICENSE](LICENSE) for full details.
 
 ## 📊 Project Stats
 
-- **Version**: 1.1.9
-- **Release Date**: October 12, 2025
-- **Lines of Code**: 7,812
-- **Documentation Files**: 12
+- **Version**: 1.1.16
+- **Release Date**: October 14, 2025
+- **Lines of Code**: 8,000+
+- **Documentation Files**: 12+
 - **Template Examples**: 35+
-- **Test Coverage**: 21 messages validated
+- **Test Coverage**: Comprehensive validation
 - **Production Status**: ✅ Ready
 
 ---
@@ -345,17 +375,22 @@ See [LICENSE](LICENSE) for full details.
 
 ### **Completed** ✅
 - HOLD message support (digest)
+- HOLDDGST message support (automatic digest grouping)
 - CHECKOUT message support (digest)
-- CHECKIN message support (digest) 🆕
-- ODUE message support (single-item) 🆕
+- CHECKIN message support (digest)
+- ODUE message support (single-item)
+- PREDUE message support (digest)
 - Automatic CSV field population
 - ODUE suppression logic
 - Multi-document YAML support
 - Title extraction and matching
 - Comprehensive documentation
+- Message template installer
+- Configurable messageText column
+- Critical module assignment fixes
 
 ### **Future Enhancements** 🔮
-- Additional notice types (PRE-DUE, RECALL, etc.)
+- Additional notice types (RECALL, etc.)
 - Custom field mappings
 - Advanced reporting
 - Web dashboard for monitoring
@@ -390,4 +425,3 @@ If this plugin helps your library, please:
 [Koha Community](https://koha-community.org/) | [ByWater Solutions](https://bywatersolutions.com/) | [CirriusImpact](https://cirriusimpact.com/)
 
 </div>
-
