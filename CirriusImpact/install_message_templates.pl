@@ -117,7 +117,7 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -142,7 +142,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have [% IF holds && holds.size > 1 %][% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have [% IF holds && holds.size > 1 %][% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -205,7 +205,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call 7315551234."
+  text: "[% branch.branchcode %]: Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -217,7 +217,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -230,7 +230,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Second notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call 7315551234."
+  text: "[% branch.branchcode %]: Second notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -242,7 +242,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your second notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your second notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -255,7 +255,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Final notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call 7315551234."
+  text: "[% branch.branchcode %]: Final notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -267,7 +267,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your final notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your final notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -280,7 +280,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call 7315551234."
+  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -292,7 +292,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -305,7 +305,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - [% IF upcoming_items.size > 1 %][% upcoming_items.size %] items due soon: [% FOREACH item IN upcoming_items %][% item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Please return or renew. Call 7315551234."
+  text: "[% branch.branchcode %]: Reminder - [% IF upcoming_items.size > 1 %][% upcoming_items.size %] items due soon: [% FOREACH item IN upcoming_items %][% item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -317,7 +317,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% IF upcoming_items.size > 1 %][% upcoming_items.size %] items due soon: [% FOREACH item IN upcoming_items %][% item.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Please return or renew. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% IF upcoming_items.size > 1 %][% upcoming_items.size %] items due soon: [% FOREACH item IN upcoming_items %][% item.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -330,7 +330,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Hold status changed for [% biblio.title %]. Check your account for details. Call 7315551234."
+  text: "[% branch.branchcode %]: Hold status changed for [% biblio.title %]. Check your account for details. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -342,7 +342,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold status has changed for [% biblio.title %]. Please check your account for details. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold status has changed for [% biblio.title %]. Please check your account for details. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -354,7 +354,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call 7315551234."
+  text: "[% branch.branchcode %]: Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -366,7 +366,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -378,7 +378,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% biblio.title %] renewed. New due date: [% issue.date_due | $KohaDates %]. Call 7315551234."
+  text: "[% branch.branchcode %]: [% biblio.title %] renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -390,7 +390,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -402,7 +402,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call 7315551234."
+  text: "[% branch.branchcode %]: Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -414,7 +414,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call [% branch.branchphone %]."
 ---}
     },
     
@@ -462,7 +462,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Welcome to the library! Your membership is now active. We look forward to serving you. Call 7315551234."
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Welcome to the library! Your membership is now active. We look forward to serving you. Call [% branch.branchphone %]."
 ---}
     }
 );
