@@ -84,7 +84,7 @@ The plugin exports the following fields in CSV format (messageText is optional b
    ```
 5. Install message templates (optional but recommended):
    ```bash
-   sudo koha-shell library -- perl install_message_templates.pl
+   sudo perl install_message_templates.pl
    ```
 6. Configure Koha's SMS driver: Administration → System Preferences → Patrons → SMSSendDriver = `US::CirriusImpact`
 7. Configure the plugin:

@@ -7,36 +7,83 @@ use warnings;
 $| = 1;
 
 print "🔍 Starting CirriusImpact Message Template Installer...\n";
-print "🔍 Checking environment variables...\n";
 
-# Check if we're running in Koha environment
-unless ($ENV{KOHA_CONF}) {
-    print "❌ ERROR: This script must be run within the Koha environment.\n";
-    print "❌ KOHA_CONF environment variable not found.\n";
-    print "❌ Please run it using: sudo koha-shell library -- perl install_message_templates.pl\n";
-    print "❌ Or from the Koha plugins directory: sudo koha-shell library -- /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/install_message_templates.pl\n";
+# Try to load required modules
+eval {
+    require DBI;
+    print "✅ DBI module loaded successfully\n";
+};
+if ($@) {
+    print "❌ ERROR loading DBI: $@\n";
     exit 1;
 }
 
-print "✅ KOHA_CONF found: $ENV{KOHA_CONF}\n";
-
 # Try to load Koha modules with error handling
+my $koha_available = 0;
 eval {
     require C4::Context;
     print "✅ C4::Context loaded successfully\n";
+    $koha_available = 1;
 };
 if ($@) {
-    print "❌ ERROR loading C4::Context: $@\n";
-    exit 1;
+    print "⚠️  C4::Context not available, will use direct database connection\n";
 }
 
-eval {
-    require Koha::Database;
-    print "✅ Koha::Database loaded successfully\n";
-};
-if ($@) {
-    print "❌ ERROR loading Koha::Database: $@\n";
-    exit 1;
+# Get database connection
+my $dbh;
+if ($koha_available) {
+    eval {
+        $dbh = C4::Context->dbh;
+        print "✅ Connected to Koha database via C4::Context\n";
+    };
+    if ($@) {
+        print "❌ ERROR connecting via C4::Context: $@\n";
+        $koha_available = 0;
+    }
+}
+
+# If Koha modules not available, try direct connection
+unless ($koha_available) {
+    print "🔍 Attempting direct database connection...\n";
+    
+    # Try to read Koha config
+    my $koha_conf = '/etc/koha/sites/library/koha-conf.xml';
+    unless (-f $koha_conf) {
+        print "❌ ERROR: Koha config file not found at $koha_conf\n";
+        print "❌ Please run this script from within the Koha environment or ensure Koha is properly installed.\n";
+        exit 1;
+    }
+    
+    # Parse Koha config for database connection
+    my ($host, $port, $database, $user, $password);
+    open my $fh, '<', $koha_conf or die "Cannot open $koha_conf: $!";
+    while (<$fh>) {
+        if (/<host>(.*?)<\/host>/) { $host = $1; }
+        elsif (/<port>(.*?)<\/port>/) { $port = $1; }
+        elsif (/<database>(.*?)<\/database>/) { $database = $1; }
+        elsif (/<user>(.*?)<\/user>/) { $user = $1; }
+        elsif (/<pass>(.*?)<\/pass>/) { $password = $1; }
+    }
+    close $fh;
+    
+    unless ($host && $database && $user) {
+        print "❌ ERROR: Could not parse database connection info from $koha_conf\n";
+        exit 1;
+    }
+    
+    $port ||= 3306;  # Default MySQL port
+    
+    eval {
+        $dbh = DBI->connect("DBI:mysql:database=$database;host=$host;port=$port", $user, $password, {
+            RaiseError => 1,
+            AutoCommit => 1,
+        });
+        print "✅ Connected to database directly: $database on $host:$port\n";
+    };
+    if ($@) {
+        print "❌ ERROR connecting to database: $@\n";
+        exit 1;
+    }
 }
 
 # CirriusImpact Message Template Installer
@@ -44,19 +91,6 @@ if ($@) {
 
 print "🚀 CirriusImpact Message Template Installer\n";
 print "==========================================\n\n";
-
-print "📋 Connecting to Koha database... ";
-
-# Connect to database with error handling
-my $dbh;
-eval {
-    $dbh = C4::Context->dbh;
-    print "✅ Connected to Koha database\n\n";
-};
-if ($@) {
-    print "❌ ERROR connecting to database: $@\n";
-    exit 1;
-}
 
 # Define all message templates
 my %templates = (

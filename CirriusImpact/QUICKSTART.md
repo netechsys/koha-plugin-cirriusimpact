@@ -105,13 +105,15 @@ perl verify_installation.pl
 
 ```bash
 cd /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/
-sudo koha-shell library -- perl install_message_templates.pl
+sudo perl install_message_templates.pl
 ```
 
 **Alternative method** (if running from any directory):
 ```bash
-sudo koha-shell library -- /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/install_message_templates.pl
+sudo perl /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/install_message_templates.pl
 ```
+
+**Note:** The script now automatically detects the Koha environment and connects directly to the database if needed.
 
 This will install 30+ pre-configured message templates for all supported message types including:
 - HOLD, HOLDDGST (Hold notifications)
