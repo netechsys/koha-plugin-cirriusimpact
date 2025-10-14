@@ -116,7 +116,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 hold: [% hold.reserve_id %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
@@ -141,7 +141,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have [% IF holds && holds.size > 1 %][% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call [% branch.branchphone %]."
 ---}
     },
@@ -166,7 +166,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF checkouts.size > 1 %]You checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]You checked out [% biblio.title %] due [% checkout.date_due | $KohaDates %][% END %]. Thank you!"
 ---}
     },
@@ -191,7 +191,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. The following item was checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you!"
 ---}
     },
@@ -216,7 +216,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
@@ -241,7 +241,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your second notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call [% branch.branchphone %]."
 ---}
     },
@@ -266,7 +266,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your final notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call [% branch.branchphone %]."
 ---}
     },
@@ -291,7 +291,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
@@ -316,7 +316,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% IF upcoming_items.size > 1 %][% upcoming_items.size %] items due soon: [% FOREACH item IN upcoming_items %][% item.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---}
     },
@@ -341,7 +341,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold status has changed for [% biblio.title %]. Please check your account for details. Call [% branch.branchphone %]."
 ---}
     },
@@ -365,7 +365,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
@@ -389,7 +389,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---}
     },
@@ -413,7 +413,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call [% branch.branchphone %]."
 ---}
     },
@@ -437,7 +437,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
 ---}
     },
@@ -461,7 +461,7 @@ sms:
         content => q{---
 CirriusImpact: yes
 patron: [% borrowernumber %]
-call:
+phone:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Welcome to the library! Your membership is now active. We look forward to serving you. Call [% branch.branchphone %]."
 ---}
     }
@@ -483,6 +483,11 @@ sub install_template {
         my ($exists) = $check_sth->fetchrow_array;
         $check_sth->finish();
         
+        # Debug output for ODUE2 and ODUE3
+        if ($template->{code} =~ /^ODUE[23]$/) {
+            print "\n   🔍 DEBUG: $name - Module: $template->{module}, Code: $template->{code}, Transport: $template->{transport}, Exists: $exists\n";
+        }
+        
         if ($exists) {
             print "🔄 already exists, updating... ";
             # Update existing template
@@ -501,6 +506,13 @@ sub install_template {
                 VALUES (?, ?, ?, ?, ?)
             ");
             my $title = "$template->{code} - $template->{transport}";
+            
+            # Debug output for ODUE2 and ODUE3
+            if ($template->{code} =~ /^ODUE[23]$/) {
+                print "\n   🔍 DEBUG: Inserting new template - Title: $title\n";
+                print "   🔍 DEBUG: Content length: " . length($template->{content}) . " characters\n";
+            }
+            
             $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title);
             $insert_sth->finish();
             print "✅ installed.\n";
