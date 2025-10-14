@@ -571,4 +571,62 @@ print "   📌 MEMBERSHIP_RENEWED (Membership renewal notifications)\n";
 print "   📌 WELCOME (New member welcome notifications)\n\n";
 
 print "🎯 All templates include CirriusImpact YAML markers and are ready to use!\n";
-print "🚀 CirriusImpact plugin setup is now complete!\n";
+print "🚀 CirriusImpact plugin setup is now complete!\n\n";
+
+# Ask if user wants to restart Koha processes
+print "🔄 Koha Process Restart Required\n";
+print "================================\n\n";
+print "The message templates have been updated in the database, but Koha may need\n";
+print "to be restarted to fully recognize the changes.\n\n";
+
+print "Do you want to restart Koha processes now? (Y/N): ";
+my $restart_choice = <STDIN>;
+chomp($restart_choice);
+
+if ($restart_choice =~ /^[Yy]/) {
+    print "\n🔄 Restarting Koha processes...\n";
+    
+    # Restart Koha services
+    my @services = qw(koha-common koha-httpd koha-indexer koha-worker);
+    my $restart_success = 1;
+    
+    foreach my $service (@services) {
+        print "   📋 Restarting $service... ";
+        
+        my $result = system("sudo systemctl restart $service 2>/dev/null");
+        if ($result == 0) {
+            print "✅\n";
+        } else {
+            print "⚠️  (may not be running)\n";
+        }
+    }
+    
+    # Also restart Apache if it's running
+    print "   📋 Restarting Apache... ";
+    my $apache_result = system("sudo systemctl restart apache2 2>/dev/null");
+    if ($apache_result == 0) {
+        print "✅\n";
+    } else {
+        print "⚠️  (may not be running)\n";
+    }
+    
+    print "\n✅ Koha processes have been restarted!\n";
+    print "🎯 The new message templates should now be fully active.\n\n";
+    
+} else {
+    print "\n📋 Manual Restart Instructions:\n";
+    print "==============================\n\n";
+    print "To activate the new message templates, you need to restart Koha processes:\n\n";
+    print "🔄 Option 1: Restart Koha services manually:\n";
+    print "   sudo systemctl restart koha-common\n";
+    print "   sudo systemctl restart koha-httpd\n";
+    print "   sudo systemctl restart koha-indexer\n";
+    print "   sudo systemctl restart koha-worker\n";
+    print "   sudo systemctl restart apache2\n\n";
+    
+    print "🔄 Option 2: Restart the entire system:\n";
+    print "   sudo reboot\n\n";
+    
+    print "⚠️  Important: The new message templates will not be fully active\n";
+    print "   until Koha processes are restarted or the system is rebooted.\n\n";
+}
