@@ -17,8 +17,11 @@ use Koha::Database;
 # CirriusImpact Message Template Installer
 # This script installs default message templates for all supported message types
 
-print "CirriusImpact Message Template Installer\n";
-print "=======================================\n\n";
+print "🚀 CirriusImpact Message Template Installer\n";
+print "==========================================\n\n";
+
+print "📋 Checking Koha environment... ";
+print "✅ Connected to Koha database\n\n";
 
 # Connect to database
 my $dbh = C4::Context->dbh;
@@ -402,7 +405,7 @@ call:
 sub install_template {
     my ($name, $template) = @_;
     
-    print "Installing $name... ";
+    print "📝 Installing $name... ";
     
     # Check if template already exists
     my $check_sth = $dbh->prepare("
@@ -414,7 +417,7 @@ sub install_template {
     $check_sth->finish();
     
     if ($exists) {
-        print "already exists, updating... ";
+        print "🔄 already exists, updating... ";
         # Update existing template
         my $update_sth = $dbh->prepare("
             UPDATE letter 
@@ -423,7 +426,7 @@ sub install_template {
         ");
         $update_sth->execute($template->{content}, $template->{module}, $template->{code}, $template->{transport});
         $update_sth->finish();
-        print "updated.\n";
+        print "✅ updated.\n";
     } else {
         # Insert new template
         my $insert_sth = $dbh->prepare("
@@ -433,40 +436,44 @@ sub install_template {
         my $title = "$template->{code} - $template->{transport}";
         $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title);
         $insert_sth->finish();
-        print "installed.\n";
+        print "✅ installed.\n";
     }
 }
 
 # Install all templates
-print "Installing message templates...\n\n";
+print "📦 Installing message templates...\n";
+print "📊 Total templates to process: " . scalar(keys %templates) . "\n\n";
 
 my $count = 0;
+my $total = scalar(keys %templates);
 for my $name (sort keys %templates) {
-    install_template($name, $templates{$name});
     $count++;
+    print "[$count/$total] ";
+    install_template($name, $templates{$name});
 }
 
-print "\n" . "=" x 50 . "\n";
-print "Installation complete!\n";
-print "Installed/Updated $count message templates.\n\n";
+print "\n" . "🎉" . "=" x 48 . "🎉\n";
+print "✅ Installation complete!\n";
+print "📈 Installed/Updated $count message templates.\n\n";
 
-print "Next steps:\n";
-print "1. Configure your CirriusImpact plugin settings\n";
-print "2. Test the templates by creating test messages\n";
-print "3. Customize templates as needed for your library\n\n";
+print "📋 Next steps:\n";
+print "   1️⃣  Configure your CirriusImpact plugin settings\n";
+print "   2️⃣  Test the templates by creating test messages\n";
+print "   3️⃣  Customize templates as needed for your library\n\n";
 
-print "Template categories installed:\n";
-print "- HOLD (Hold ready notifications)\n";
-print "- HOLDDGST (Hold digest notifications)\n";
-print "- CHECKOUT (Item checkout notifications)\n";
-print "- CHECKIN (Item return notifications)\n";
-print "- ODUE/ODUE2/ODUE3 (Overdue notifications)\n";
-print "- PREDUE/PREDUEDGST (Pre-due notifications)\n";
-print "- HOLD_CHANGED (Hold status change notifications)\n";
-print "- HOLD_REMINDER (Hold reminder notifications)\n";
-print "- RENEWAL (Item renewal notifications)\n";
-print "- MEMBERSHIP_EXPIRY (Membership expiry notifications)\n";
-print "- MEMBERSHIP_RENEWED (Membership renewal notifications)\n";
-print "- WELCOME (New member welcome notifications)\n\n";
+print "📚 Template categories installed:\n";
+print "   📌 HOLD (Hold ready notifications)\n";
+print "   📌 HOLDDGST (Hold digest notifications)\n";
+print "   📌 CHECKOUT (Item checkout notifications)\n";
+print "   📌 CHECKIN (Item return notifications)\n";
+print "   📌 ODUE/ODUE2/ODUE3 (Overdue notifications)\n";
+print "   📌 PREDUE/PREDUEDGST (Pre-due notifications)\n";
+print "   📌 HOLD_CHANGED (Hold status change notifications)\n";
+print "   📌 HOLD_REMINDER (Hold reminder notifications)\n";
+print "   📌 RENEWAL (Item renewal notifications)\n";
+print "   📌 MEMBERSHIP_EXPIRY (Membership expiry notifications)\n";
+print "   📌 MEMBERSHIP_RENEWED (Membership renewal notifications)\n";
+print "   📌 WELCOME (New member welcome notifications)\n\n";
 
-print "All templates include CirriusImpact YAML markers and are ready to use!\n";
+print "🎯 All templates include CirriusImpact YAML markers and are ready to use!\n";
+print "🚀 CirriusImpact plugin setup is now complete!\n";
