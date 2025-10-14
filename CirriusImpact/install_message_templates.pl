@@ -493,27 +493,29 @@ sub install_template {
             # Update existing template
             my $update_sth = $dbh->prepare("
                 UPDATE letter 
-                SET content = ? 
+                SET content = ?, name = ?
                 WHERE module = ? AND code = ? AND message_transport_type = ?
             ");
-            $update_sth->execute($template->{content}, $template->{module}, $template->{code}, $template->{transport});
+            my $name = $template->{code};  # Use the code as the name (like ODUE4)
+            $update_sth->execute($template->{content}, $name, $template->{module}, $template->{code}, $template->{transport});
             $update_sth->finish();
             print "✅ updated.\n";
         } else {
             # Insert new template
             my $insert_sth = $dbh->prepare("
-                INSERT INTO letter (module, code, message_transport_type, content, title)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO letter (module, code, message_transport_type, content, title, name)
+                VALUES (?, ?, ?, ?, ?, ?)
             ");
             my $title = "$template->{code} - $template->{transport}";
+            my $name = $template->{code};  # Use the code as the name (like ODUE4)
             
             # Debug output for ODUE2 and ODUE3
             if ($template->{code} =~ /^ODUE[23]$/) {
-                print "\n   🔍 DEBUG: Inserting new template - Title: $title\n";
+                print "\n   🔍 DEBUG: Inserting new template - Title: $title, Name: $name\n";
                 print "   🔍 DEBUG: Content length: " . length($template->{content}) . " characters\n";
             }
             
-            $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title);
+            $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title, $name);
             $insert_sth->finish();
             print "✅ installed.\n";
         }
