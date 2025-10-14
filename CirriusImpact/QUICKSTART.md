@@ -569,7 +569,7 @@ sms:
 
 **Note:** All additional message types automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields by querying the appropriate database tables (reserves, borrowers, issues, accountlines).
 
-### Step 7: Test Message Processing
+### Step 8: Test Message Processing
 
 - Create a few Hold Reservations and Checkin the items to create a Hold Notification.
 
