@@ -3,16 +3,41 @@
 use strict;
 use warnings;
 
+# Enable output buffering
+$| = 1;
+
+print "🔍 Starting CirriusImpact Message Template Installer...\n";
+print "🔍 Checking environment variables...\n";
+
 # Check if we're running in Koha environment
 unless ($ENV{KOHA_CONF}) {
-    print "ERROR: This script must be run within the Koha environment.\n";
-    print "Please run it using: sudo koha-shell library -- perl install_message_templates.pl\n";
-    print "Or from the Koha plugins directory: sudo koha-shell library -- /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/install_message_templates.pl\n";
+    print "❌ ERROR: This script must be run within the Koha environment.\n";
+    print "❌ KOHA_CONF environment variable not found.\n";
+    print "❌ Please run it using: sudo koha-shell library -- perl install_message_templates.pl\n";
+    print "❌ Or from the Koha plugins directory: sudo koha-shell library -- /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/install_message_templates.pl\n";
     exit 1;
 }
 
-use C4::Context;
-use Koha::Database;
+print "✅ KOHA_CONF found: $ENV{KOHA_CONF}\n";
+
+# Try to load Koha modules with error handling
+eval {
+    require C4::Context;
+    print "✅ C4::Context loaded successfully\n";
+};
+if ($@) {
+    print "❌ ERROR loading C4::Context: $@\n";
+    exit 1;
+}
+
+eval {
+    require Koha::Database;
+    print "✅ Koha::Database loaded successfully\n";
+};
+if ($@) {
+    print "❌ ERROR loading Koha::Database: $@\n";
+    exit 1;
+}
 
 # CirriusImpact Message Template Installer
 # This script installs default message templates for all supported message types
@@ -20,11 +45,18 @@ use Koha::Database;
 print "🚀 CirriusImpact Message Template Installer\n";
 print "==========================================\n\n";
 
-print "📋 Checking Koha environment... ";
-print "✅ Connected to Koha database\n\n";
+print "📋 Connecting to Koha database... ";
 
-# Connect to database
-my $dbh = C4::Context->dbh;
+# Connect to database with error handling
+my $dbh;
+eval {
+    $dbh = C4::Context->dbh;
+    print "✅ Connected to Koha database\n\n";
+};
+if ($@) {
+    print "❌ ERROR connecting to database: $@\n";
+    exit 1;
+}
 
 # Define all message templates
 my %templates = (
@@ -407,37 +439,44 @@ sub install_template {
     
     print "📝 Installing $name... ";
     
-    # Check if template already exists
-    my $check_sth = $dbh->prepare("
-        SELECT COUNT(*) FROM letter 
-        WHERE module = ? AND code = ? AND message_transport_type = ?
-    ");
-    $check_sth->execute($template->{module}, $template->{code}, $template->{transport});
-    my ($exists) = $check_sth->fetchrow_array;
-    $check_sth->finish();
-    
-    if ($exists) {
-        print "🔄 already exists, updating... ";
-        # Update existing template
-        my $update_sth = $dbh->prepare("
-            UPDATE letter 
-            SET content = ? 
+    eval {
+        # Check if template already exists
+        my $check_sth = $dbh->prepare("
+            SELECT COUNT(*) FROM letter 
             WHERE module = ? AND code = ? AND message_transport_type = ?
         ");
-        $update_sth->execute($template->{content}, $template->{module}, $template->{code}, $template->{transport});
-        $update_sth->finish();
-        print "✅ updated.\n";
-    } else {
-        # Insert new template
-        my $insert_sth = $dbh->prepare("
-            INSERT INTO letter (module, code, message_transport_type, content, title)
-            VALUES (?, ?, ?, ?, ?)
-        ");
-        my $title = "$template->{code} - $template->{transport}";
-        $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title);
-        $insert_sth->finish();
-        print "✅ installed.\n";
+        $check_sth->execute($template->{module}, $template->{code}, $template->{transport});
+        my ($exists) = $check_sth->fetchrow_array;
+        $check_sth->finish();
+        
+        if ($exists) {
+            print "🔄 already exists, updating... ";
+            # Update existing template
+            my $update_sth = $dbh->prepare("
+                UPDATE letter 
+                SET content = ? 
+                WHERE module = ? AND code = ? AND message_transport_type = ?
+            ");
+            $update_sth->execute($template->{content}, $template->{module}, $template->{code}, $template->{transport});
+            $update_sth->finish();
+            print "✅ updated.\n";
+        } else {
+            # Insert new template
+            my $insert_sth = $dbh->prepare("
+                INSERT INTO letter (module, code, message_transport_type, content, title)
+                VALUES (?, ?, ?, ?, ?)
+            ");
+            my $title = "$template->{code} - $template->{transport}";
+            $insert_sth->execute($template->{module}, $template->{code}, $template->{transport}, $template->{content}, $title);
+            $insert_sth->finish();
+            print "✅ installed.\n";
+        }
+    };
+    if ($@) {
+        print "❌ ERROR: $@\n";
+        return 0;
     }
+    return 1;
 }
 
 # Install all templates
@@ -445,16 +484,24 @@ print "📦 Installing message templates...\n";
 print "📊 Total templates to process: " . scalar(keys %templates) . "\n\n";
 
 my $count = 0;
+my $success_count = 0;
 my $total = scalar(keys %templates);
+
 for my $name (sort keys %templates) {
     $count++;
     print "[$count/$total] ";
-    install_template($name, $templates{$name});
+    if (install_template($name, $templates{$name})) {
+        $success_count++;
+    }
 }
 
 print "\n" . "🎉" . "=" x 48 . "🎉\n";
 print "✅ Installation complete!\n";
-print "📈 Installed/Updated $count message templates.\n\n";
+print "📈 Successfully processed $success_count out of $count message templates.\n";
+if ($success_count < $count) {
+    print "⚠️  Some templates failed to install. Check error messages above.\n";
+}
+print "\n";
 
 print "📋 Next steps:\n";
 print "   1️⃣  Configure your CirriusImpact plugin settings\n";
