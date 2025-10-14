@@ -96,7 +96,7 @@ print "==========================================\n\n";
 my %templates = (
     # HOLD Templates
     'HOLD_SMS' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD',
         transport => 'sms',
         content => q{---
@@ -109,7 +109,7 @@ sms:
     },
     
     'HOLD_PHONE' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD',
         transport => 'phone',
         content => q{---
@@ -123,7 +123,7 @@ phone:
     
     # HOLDDGST Templates (Digest)
     'HOLDDGST_SMS' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLDDGST',
         transport => 'sms',
         content => q{---
@@ -135,7 +135,7 @@ sms:
     },
     
     'HOLDDGST_PHONE' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLDDGST',
         transport => 'phone',
         content => q{---
@@ -323,7 +323,7 @@ phone:
     
     # Additional Message Types
     'HOLD_CHANGED_SMS' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD_CHANGED',
         transport => 'sms',
         content => q{---
@@ -335,7 +335,7 @@ sms:
     },
     
     'HOLD_CHANGED_PHONE' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD_CHANGED',
         transport => 'phone',
         content => q{---
@@ -347,7 +347,7 @@ phone:
     },
     
     'HOLD_REMINDER_SMS' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD_REMINDER',
         transport => 'sms',
         content => q{---
@@ -359,7 +359,7 @@ sms:
     },
     
     'HOLD_REMINDER_PHONE' => {
-        module => 'reserves',
+        module => 'circulation',
         code => 'HOLD_REMINDER',
         transport => 'phone',
         content => q{---
