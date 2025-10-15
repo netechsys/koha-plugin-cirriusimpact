@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.23";
+our $VERSION         = "1.1.25";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -325,7 +325,7 @@ sub _generate_csv_output {
         STAB_userSalutation patronFirstName patronLastName phone email 
         branch branchname itemsID date title DeliveryOptionID LanguageID 
         NotificationTypeID ReportingOrgID PatronID ItemRecordID RequestID 
-        PickupAreaDescription TxnID AccountBalance
+        PickupAreaDescription TxnID AccountBalance kohaNotificationType
     );
     
     # Add messageText column if enabled in configuration
@@ -382,9 +382,11 @@ sub _generate_csv_output {
         my %row_data;
         $row_data{commType} = $commType;
         $row_data{language} = $transport_section->{language} || '';
-        # Use letter code instead of transport type
-        $row_data{notificationType} = $transport_section->{meta}->{letter_code} || $message_type->{letter_code} || '';
-        $row_data{notificationLevel} = $transport_section->{notificationLevel} || '';
+        # Get notification type and level from configurable mapping
+        my $letter_code = $transport_section->{meta}->{letter_code} || $message_type->{letter_code} || '';
+        my $notification_info = $self->_get_notification_type_and_level($letter_code);
+        $row_data{notificationType} = $notification_info->{type} || '';
+        $row_data{notificationLevel} = $notification_info->{level} || '';
         $row_data{patronBarCode} = $transport_section->{patronBarCode} || '';
         $row_data{STAB_userSalutation} = $transport_section->{STAB_userSaluation} || '';
         $row_data{patronFirstName} = $transport_section->{patronFirstName} || '';
@@ -406,6 +408,8 @@ sub _generate_csv_output {
         $row_data{PickupAreaDescription} = $transport_section->{PickupAreaDescription} || '';
         $row_data{TxnID} = $transport_section->{TxnID} || '';
         $row_data{AccountBalance} = $transport_section->{AccountBalance} || '';
+        # kohaNotificationType is the Koha letter code (moved to end)
+        $row_data{kohaNotificationType} = $letter_code;
         
         # Add message text based on transport type (if enabled in configuration)
         if ($self->retrieve_data('include_messagetext')) {
@@ -710,9 +714,9 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 msgid              => defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '',
                 commType           => $commType,
                 language           => defined $pat->{lang}                ? $pat->{lang}                : '',
-                # Use letter code instead of transport type
-                notificationType   => defined $msgt->{letter_code}        ? $msgt->{letter_code}        : '',
-                notificationLevel  => '',
+                # Get notification type and level from configurable mapping
+                notificationType   => $self->_get_notification_type_and_level($msgt->{letter_code})->{type} || '',
+                notificationLevel  => $self->_get_notification_type_and_level($msgt->{letter_code})->{level} || '',
                 patronBarCode      => defined $pat->{cardnumber}          ? $pat->{cardnumber}          : '',
                 STAB_userSaluation => _get_patron_title($pat),
                 patronFirstName    => defined $pat->{firstname}           ? $pat->{firstname}           : '',
@@ -732,6 +736,11 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 PatronID           => defined $pat->{borrowernumber}      ? $pat->{borrowernumber}      : '',
                 ItemRecordID       => '',
                 RequestID          => defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '',
+                PickupAreaDescription => '',
+                TxnID              => '',
+                AccountBalance     => '',
+                # kohaNotificationType is the Koha letter code (moved to end)
+                kohaNotificationType => defined $msgt->{letter_code}        ? $msgt->{letter_code}        : '',
             );
             
             use Data::Dumper;
@@ -924,9 +933,9 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 $mf->{msgid}              = defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '';
                 $mf->{commType}           = $commType;
                 $mf->{language}           = defined $pat->{lang}                ? $pat->{lang}                : '';
-                # Use letter code instead of transport type
-                $mf->{notificationType}   = defined $msgt->{letter_code}        ? $msgt->{letter_code}        : '';
-                $mf->{notificationLevel}  = '';
+                # Get notification type and level from configurable mapping
+                $mf->{notificationType}   = $self->_get_notification_type_and_level($msgt->{letter_code})->{type} || '';
+                $mf->{notificationLevel}  = $self->_get_notification_type_and_level($msgt->{letter_code})->{level} || '';
 
                 $mf->{patronBarCode}      = defined $pat->{cardnumber}          ? $pat->{cardnumber}          : '';
                 $mf->{STAB_userSaluation} = _get_patron_title($pat);
@@ -947,7 +956,8 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
 
                 $mf->{DeliveryOptionID}   = '';
                 $mf->{LanguageID}         = '';
-                $mf->{NotificationTypeID} = '';
+                # Get notification type from configurable mapping
+                $mf->{NotificationTypeID} = $self->_get_notification_type_and_level($msgt->{letter_code})->{type} || '';
                 $mf->{ReportingOrgID}     = '';
 
                 $mf->{PatronID}           = defined $pat->{borrowernumber}      ? $pat->{borrowernumber}      : '';
@@ -1136,6 +1146,85 @@ sub _hold_codes {
 sub _predue_codes {
     # Return pre-due notice letter codes that should be processed
     return ['PREDUE', 'PREDUEDGST'];
+}
+
+sub _get_notification_type_and_level {
+    my ($letter_code) = @_;
+    
+    # Load notification mapping from configurable YAML file
+    my $mapping = _load_notification_mapping();
+    
+    return $mapping->{$letter_code} || { type => 0, level => 0 };
+}
+
+sub _load_notification_mapping {
+    my $self = shift;
+    
+    # Cache the mapping to avoid reloading on every call
+    return $self->{_notification_mapping} if $self->{_notification_mapping};
+    
+    my $mapping_file = $self->bundle_path() . '/notification_mapping.yml';
+    
+    # Check if mapping file exists
+    unless (-f $mapping_file) {
+        warn "CirriusImpact: notification_mapping.yml not found at $mapping_file, using defaults\n";
+        return $self->{_notification_mapping} = _get_default_notification_mapping();
+    }
+    
+    # Load YAML file
+    eval {
+        my $yaml_content = do {
+            local $/;
+            open my $fh, '<', $mapping_file or die "Cannot open $mapping_file: $!";
+            <$fh>;
+        };
+        
+        $self->{_notification_mapping} = Load($yaml_content);
+    };
+    
+    if ($@) {
+        warn "CirriusImpact: Error loading notification_mapping.yml: $@, using defaults\n";
+        return $self->{_notification_mapping} = _get_default_notification_mapping();
+    }
+    
+    return $self->{_notification_mapping};
+}
+
+sub _get_default_notification_mapping {
+    # Fallback default mapping if YAML file is not available
+    return {
+        # Overdue Notices - Type 1
+        'ODUE'  => { type => 1, level => 1 },
+        'ODUE2' => { type => 1, level => 2 },
+        'ODUE3' => { type => 1, level => 3 },
+        
+        # Hold Notices - Type 2
+        'HOLD'              => { type => 2, level => 1 },
+        'HOLDDGST'          => { type => 2, level => 1 },
+        'HOLD_CHANGED'      => { type => 2, level => 2 },
+        'HOLD_REMINDER'     => { type => 2, level => 3 },
+        'HOLDPLACED'        => { type => 2, level => 4 },
+        'HOLDPLACED_PATRON' => { type => 2, level => 5 },
+        'HOLD_SLIP'         => { type => 2, level => 6 },
+        
+        # Circulation Notices - Type 3
+        'CHECKOUT' => { type => 3, level => 1 },
+        'CHECKIN'  => { type => 3, level => 2 },
+        
+        # Pre-due Notices - Type 4
+        'PREDUE'      => { type => 4, level => 1 },
+        'PREDUEDGST'  => { type => 4, level => 1 },
+        
+        # Renewal Notices - Type 5
+        'RENEWAL'           => { type => 5, level => 1 },
+        'AUTO_RENEWALS'     => { type => 5, level => 2 },
+        'AUTO_RENEWALS_DGST' => { type => 5, level => 2 },
+        
+        # Membership Notices - Type 6
+        'MEMBERSHIP_EXPIRY'  => { type => 6, level => 1 },
+        'MEMBERSHIP_RENEWED' => { type => 6, level => 2 },
+        'WELCOME'            => { type => 6, level => 3 },
+    };
 }
 
 sub _get_patron_title {

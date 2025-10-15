@@ -1,3 +1,23 @@
+## 1.1.25 - 2025-10-15
+
+### Configurable Notification Type/Level Mapping System
+- **NEW**: Added configurable YAML mapping file (`notification_mapping.yml`) for notification types and levels
+- **NEW**: `_get_notification_type_and_level()` function with configurable mapping support
+- **NEW**: Automatic CSV integration for `notificationType` and `notificationLevel` fields
+- **NEW**: `kohaNotificationType` field (position 26) containing Koha letter codes
+- **ENHANCED**: CSV field reordering to match exact specification:
+  - `notificationType` (position 3): Mapping notification type (1-6)
+  - `notificationLevel` (position 4): Mapping notification level (1-6)
+  - `NotificationTypeID` (position 18): Empty field
+  - `kohaNotificationType` (position 26): Koha letter code (HOLD, ODUE2, etc.)
+- **FEATURES**: 
+  - 21 supported message types with configurable Type/Level mapping
+  - Fallback to hardcoded defaults if YAML file missing/corrupted
+  - Cached loading for performance
+  - No restart required for mapping changes
+- **DOCUMENTATION**: Added `NOTIFICATION_TYPES.md` with complete usage guide
+- **TESTING**: Verified configurable mapping system and CSV export integration
+
 ## 1.1.16 - 2025-10-14
 
 ### Critical Module Assignment Fix

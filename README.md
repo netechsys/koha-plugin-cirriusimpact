@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-[![Version](https://img.shields.io/badge/version-1.1.9-blue.svg)](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.9)
+[![Version](https://img.shields.io/badge/version-1.1.25-blue.svg)](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.25)
 [![License](https://img.shields.io/badge/license-GPL--3.0-green.svg)](LICENSE)
 [![Koha](https://img.shields.io/badge/Koha-Compatible-orange.svg)](https://koha-community.org/)
 

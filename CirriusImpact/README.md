@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-Version: **1.1.16** (2025-10-14)
+Version: **1.1.25** (2025-10-15)
 
 ## Overview
 
@@ -28,8 +28,8 @@ This plugin integrates Koha ILS with CirriusImpact messaging services, forwardin
 The plugin exports the following fields in CSV format (messageText is optional based on configuration):
 1. `commType` - Communication type (S=SMS, V=Voice/Phone, E=Email, W=WhatsApp)
 2. `language` - Patron language preference
-3. `notificationType` - Letter code (HOLD, ODUE, ODUE2, ODUE3, etc.)
-4. `notificationLevel` - Notification level
+3. `notificationType` - Mapping notification type (1-6 from configurable mapping)
+4. `notificationLevel` - Mapping notification level (1-6 from configurable mapping)
 5. `patronBarCode` - Patron barcode
 6. `STAB_userSalutation` - Patron salutation (Mr, Ms, etc.)
 7. `patronFirstName` - Patron first name
@@ -43,7 +43,7 @@ The plugin exports the following fields in CSV format (messageText is optional b
 15. `title` - Item title
 16. `DeliveryOptionID` - Delivery option identifier
 17. `LanguageID` - Language identifier
-18. `NotificationTypeID` - Notification type identifier
+18. `NotificationTypeID` - Empty field
 19. `ReportingOrgID` - Reporting organization ID
 20. `PatronID` - Patron ID (borrowernumber)
 21. `ItemRecordID` - Item record identifier
@@ -51,7 +51,8 @@ The plugin exports the following fields in CSV format (messageText is optional b
 23. `PickupAreaDescription` - Pickup location description
 24. `TxnID` - Transaction ID
 25. `AccountBalance` - Patron account balance
-26. `messageText` - Full message content (SMS text, Phone script, Email body) - **Optional, configurable**
+26. `kohaNotificationType` - Koha letter code (HOLD, ODUE2, CHECKOUT, etc.)
+27. `messageText` - Full message content (SMS text, Phone script, Email body) - **Optional, configurable**
 
 ### Configuration Options
 - **SFTP Settings**: Host, username, password for file upload
