@@ -435,6 +435,56 @@ call:
 ---}
     },
     
+    # AUTO_RENEWALS Templates
+    'AUTO_RENEWALS_SMS' => {
+        module => 'circulation',
+        code => 'AUTO_RENEWALS',
+        transport => 'sms',
+        content => q{---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% biblio.title %] auto-renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+---}
+    },
+    
+    'AUTO_RENEWALS_PHONE' => {
+        module => 'circulation',
+        code => 'AUTO_RENEWALS',
+        transport => 'phone',
+        content => q{---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been auto-renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+---}
+    },
+    
+    # AUTO_RENEWALS_DGST Templates
+    'AUTO_RENEWALS_DGST_SMS' => {
+        module => 'circulation',
+        code => 'AUTO_RENEWALS_DGST',
+        transport => 'sms',
+        content => q{---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items auto-renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Call [% branch.branchphone %]."
+---}
+    },
+    
+    'AUTO_RENEWALS_DGST_PHONE' => {
+        module => 'circulation',
+        code => 'AUTO_RENEWALS_DGST',
+        transport => 'phone',
+        content => q{---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items have been auto-renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Call [% branch.branchphone %]."
+---}
+    },
+    
     'MEMBERSHIP_EXPIRY_SMS' => {
         module => 'members',
         code => 'MEMBERSHIP_EXPIRY',
@@ -616,6 +666,7 @@ print "- PREDUE/PREDUEDGST (Pre-due notifications)\n";
 print "- HOLD_CHANGED (Hold status change notifications)\n";
 print "- HOLD_REMINDER (Hold reminder notifications)\n";
 print "- RENEWAL (Item renewal notifications)\n";
+print "- AUTO_RENEWALS/AUTO_RENEWALS_DGST (Auto-renewal notifications)\n";
 print "- MEMBERSHIP_EXPIRY (Membership expiry notifications)\n";
 print "- MEMBERSHIP_RENEWED (Membership renewal notifications)\n";
 print "- WELCOME (New member welcome notifications)\n\n";
