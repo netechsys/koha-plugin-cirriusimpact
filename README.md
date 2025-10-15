@@ -11,7 +11,7 @@
 ## 📋 Table of Contents
 
 - [Features](#features)
-- [What's New in v1.1.9](#whats-new-in-v119)
+- [What's New in v1.1.25](#whats-new-in-v1125)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Documentation](#documentation)
@@ -53,34 +53,31 @@
 
 ---
 
-## 🆕 What's New in v1.1.9
+## 🆕 What's New in v1.1.25
 
-### **CHECKIN Message Support**
-✅ New `_ci_backfill_checkin_identifiers()` function  
-✅ Auto-populates: `itemsID`, `biblionumber`, `title`, `date` (returndate)  
-✅ Title extraction from rendered messages  
-✅ Database matching to `old_issues` table (24-hour window)  
-✅ Works for all transports: SMS, Phone, Email, WhatsApp
+### **Configurable Notification Type/Level Mapping System**
+✅ Added configurable YAML mapping file (`notification_mapping.yml`) for notification types and levels  
+✅ Created `_get_notification_type_and_level()` function with configurable mapping support  
+✅ Integrated automatic CSV population for `notificationType` and `notificationLevel` fields  
+✅ Added `kohaNotificationType` field (position 26) containing Koha letter codes  
+✅ Reordered CSV fields to match exact specification:
+  - `notificationType` (position 3): Mapping notification type (1-6)
+  - `notificationLevel` (position 4): Mapping notification level (1-6)
+  - `NotificationTypeID` (position 18): Empty field
+  - `kohaNotificationType` (position 26): Koha letter code (HOLD, ODUE2, etc.)
 
-### **ODUE Template Fix**
-✅ Simplified ODUE templates to avoid Koha TT `.size` method errors  
-✅ Single-item format (one message per overdue item)  
-✅ Updated ODUE, ODUE2, ODUE3 templates  
-✅ Phone suppression working correctly when patron has SMS enabled
+### **Enhanced Features**
+✅ 21 supported message types with configurable Type/Level mapping  
+✅ Fallback to hardcoded defaults if YAML file missing/corrupted  
+✅ Cached loading for performance  
+✅ No restart required for mapping changes  
+✅ Complete documentation and usage guide
 
 ### **Documentation Updates**
-✅ Updated `QUICKSTART.md` with CHECKIN + simplified ODUE templates  
-✅ Updated `NOTICE_EXAMPLES.md` with 6 CHECKIN options  
-✅ Added comprehensive `TESTING_RESULTS_v1.1.9.md`  
-✅ Updated `CHANGELOG.md` with all v1.1.9 changes
-
-### **Complete Testing**
-✅ **21 messages tested** across 4 notice types  
-✅ **HOLD**: 4 messages ✓  
-✅ **CHECKOUT**: 4 messages ✓  
-✅ **CHECKIN**: 4 messages ✓  
-✅ **ODUE**: 9 messages ✓  
-✅ **All CSV fields validated** (546 data points)
+✅ Added `NOTIFICATION_TYPES.md` with complete usage guide  
+✅ Updated `CHANGELOG.md` with all v1.1.25 changes  
+✅ Updated CSV field descriptions in README  
+✅ Comprehensive testing of configurable mapping system
 
 ---
 
@@ -90,7 +87,7 @@
 
 ```bash
 # 1. Download the plugin
-wget https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.9.zip
+wget https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.25.zip
 
 # 2. Install in Koha
 # Upload via: Administration → Plugins → Upload plugin
@@ -147,7 +144,7 @@ sms:
 | **[TEMPLATE_FORMAT.md](CirriusImpact/TEMPLATE_FORMAT.md)** | YAML template syntax reference |
 | **[DIGEST_VS_INDIVIDUAL.md](CirriusImpact/DIGEST_VS_INDIVIDUAL.md)** | Digest vs individual messaging guide |
 | **[CHANGELOG.md](CirriusImpact/CHANGELOG.md)** | Version history and changes |
-| **[TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md)** | Complete test validation |
+| **[NOTIFICATION_TYPES.md](CirriusImpact/NOTIFICATION_TYPES.md)** | Configurable mapping system guide |
 
 ### **Quick Reference Guides**
 - [DIGEST_QUICK_REFERENCE.md](CirriusImpact/DIGEST_QUICK_REFERENCE.md) - Digest message format
@@ -214,28 +211,29 @@ All 26 fields verified:
 - ✅ `PickupAreaDescription`, `AccountBalance`
 - ✅ `messageText` (SMS text or Phone script)
 
-See [TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md) for complete details.
+See [NOTIFICATION_TYPES.md](CirriusImpact/NOTIFICATION_TYPES.md) for configurable mapping details.
 
 ---
 
 ## 📥 Download
 
-### **Latest Release: v1.1.9**
+### **Latest Release: v1.1.25**
 
 **Direct Download:**
-- **GitHub Release**: [v1.1.9](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.9)
-- **Archive**: [Download ZIP](https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.9.zip)
+- **GitHub Release**: [v1.1.25](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.1.25)
+- **Archive**: [Download ZIP](https://github.com/netechsys/koha-plugin-cirriusimpact/archive/refs/tags/v1.1.25.zip)
 
 **What's Included:**
-- 1 main plugin file (`CirriusImpact.pm` v1.1.9)
+- 1 main plugin file (`CirriusImpact.pm` v1.1.25)
 - 2 SMS drivers (US::CirriusImpact, CirriusImpact)
-- 12 documentation files
+- 13 documentation files
 - 2 installation scripts
 - 1 configuration template
+- 1 configurable mapping file (`notification_mapping.yml`)
 
-**Package Size:** 81KB  
-**Files:** 28 total  
-**Release Date:** October 12, 2025
+**Package Size:** 110KB  
+**Files:** 30 total  
+**Release Date:** October 15, 2025
 
 ---
 
@@ -301,7 +299,7 @@ Use simplified single-item ODUE templates without `.size` calls. Templates updat
 ### **Documentation**
 - **Quick Start**: [QUICKSTART.md](CirriusImpact/QUICKSTART.md)
 - **Examples**: [NOTICE_EXAMPLES.md](CirriusImpact/NOTICE_EXAMPLES.md)
-- **Testing**: [TESTING_RESULTS_v1.1.9.md](CirriusImpact/TESTING_RESULTS_v1.1.9.md)
+- **Mapping System**: [NOTIFICATION_TYPES.md](CirriusImpact/NOTIFICATION_TYPES.md)
 
 ### **Troubleshooting**
 See [QUICKSTART.md - Troubleshooting](CirriusImpact/QUICKSTART.md#troubleshooting) section for common issues and solutions.
@@ -331,10 +329,10 @@ See [LICENSE](LICENSE) for full details.
 
 ## 📊 Project Stats
 
-- **Version**: 1.1.9
-- **Release Date**: October 12, 2025
-- **Lines of Code**: 7,812
-- **Documentation Files**: 12
+- **Version**: 1.1.25
+- **Release Date**: October 15, 2025
+- **Lines of Code**: 8,200+
+- **Documentation Files**: 13
 - **Template Examples**: 35+
 - **Test Coverage**: 21 messages validated
 - **Production Status**: ✅ Ready
@@ -346,12 +344,15 @@ See [LICENSE](LICENSE) for full details.
 ### **Completed** ✅
 - HOLD message support (digest)
 - CHECKOUT message support (digest)
-- CHECKIN message support (digest) 🆕
-- ODUE message support (single-item) 🆕
+- CHECKIN message support (digest)
+- ODUE message support (single-item)
+- PREDUE message support (pre-due reminders)
+- AUTO_RENEWALS message support (auto-renewal notifications)
 - Automatic CSV field population
 - ODUE suppression logic
 - Multi-document YAML support
 - Title extraction and matching
+- Configurable notification type/level mapping system 🆕
 - Comprehensive documentation
 
 ### **Future Enhancements** 🔮
@@ -379,7 +380,7 @@ If this plugin helps your library, please:
 - 📖 [Read Documentation](CirriusImpact/)
 - 🐛 [Report Issues](https://github.com/netechsys/koha-plugin-cirriusimpact/issues)
 - 📝 [View Changelog](CirriusImpact/CHANGELOG.md)
-- ✅ [Test Results](CirriusImpact/TESTING_RESULTS_v1.1.9.md)
+- ✅ [Mapping System](CirriusImpact/NOTIFICATION_TYPES.md)
 
 ---
 
