@@ -4,12 +4,14 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
+Download Latest Released version of Plugin from the GIT Repository.
+
 ## Installation (10 minutes)
 
-### Step 1: Upload Plugin to Koha
+### Step 1: Upload Plugin to Koha from the Administration Website.
 
-1. Go to **Tools > Plugins > Upload Plugin**
-2. Select `CirriusImpact-v1.1.7.kpz`
+1. Go to **More > Administration > Plugins > Upload Plugin**
+2. Select Current KPZ downloaded. ( IE. `CirriusImpact-v1.1.25.kpz` )
 3. Click **Upload**
 4. Wait for upload to complete
 
