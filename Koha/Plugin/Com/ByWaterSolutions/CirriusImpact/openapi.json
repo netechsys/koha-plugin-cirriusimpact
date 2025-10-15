@@ -1,0 +1,16 @@
+{
+  "openapi": "3.0.0",
+  "info": {},
+  "paths": {
+    "/contrib/CirriusImpact/info": {
+      "get": {
+        "summary": "Info",
+        "responses": {
+          "200": {
+            "description": "ok"
+          }
+        }
+      }
+    }
+  }
+}
