@@ -4,18 +4,20 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
+Download Latest Released version of Plugin from the GIT Repository.
+
 ## Installation (10 minutes)
 
-### Step 1: Upload Plugin to Koha
+### Step 1: Upload Plugin to Koha from the Administration Website.
 
-1. Go to **Tools > Plugins > Upload Plugin**
-2. Select `CirriusImpact-v1.1.7.kpz`
+1. Go to **More > Administration > Plugins > Upload Plugin**
+2. Select Current KPZ downloaded. ( IE. `CirriusImpact-v1.1.25.kpz` )
 3. Click **Upload**
 4. Wait for upload to complete
 
 ### Step 2: Install SMS Drivers (Both Drivers)
 
-Navigate to the plugin directory and run the installer:
+SSH to the server as library user.  Navigate to the plugin directory and run the installer:
 
 ```bash
 cd /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/
@@ -62,9 +64,10 @@ Set the SMS driver in Koha:
 
 ### Step 4: Verify Installation
 
-Run the verification script:
+Run the verification script in the SSH session:
 
 ```bash
+sudo koha-shell INSTANCE (where INSTANCE is the library instance name.)
 perl verify_installation.pl
 ```
 
@@ -77,7 +80,7 @@ perl verify_installation.pl
 ✓ All checks passed!
 ```
 
-**Common warnings (both are normal):**
+**Common warnings (normal):**
 - ⚠ Archive directory not found → **Will be created automatically on first run**
 
 ### Step 5: Configure Plugin
@@ -101,7 +104,7 @@ perl verify_installation.pl
 
 ### Step 6: Install Message Templates (Optional but Recommended)
 
-**🆕 NEW:** Install default message templates automatically:
+**🆕 NEW:** Install default message templates automatically from SSH shell:
 
 ```bash
 cd /var/lib/koha/library/plugins/Koha/Plugin/Com/ByWaterSolutions/CirriusImpact/
