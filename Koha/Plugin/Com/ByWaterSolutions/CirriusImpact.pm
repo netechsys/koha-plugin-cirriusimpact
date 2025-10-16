@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.32";
+our $VERSION         = "1.1.33";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2415,17 +2415,40 @@ sub _ci_backfill_additional_identifiers {
             if ($letter eq 'HOLD' || $letter =~ /^HOLD_(CHANGED|REMINDER)$/) {
                 # For HOLD messages, query the reserves table
                 INFO("Querying holds for borrowernumber=$pid");
-                my $sql = q{
-                    SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
-                    FROM reserves r
-                    JOIN biblio b ON b.biblionumber = r.biblionumber
-                    WHERE r.borrowernumber = ?
-                      AND r.found = 'W'
-                    ORDER BY r.reservedate DESC
-                    LIMIT 1
-                };
+                # Try to get RequestID from the section data
+                my $request_id = $section->{RequestID} || $data->{RequestID} || '';
+                INFO("RequestID from section: $request_id");
+                
+                my $sql;
+                my @params;
+                
+                if ($request_id) {
+                    # If we have a specific RequestID, query for that specific hold
+                    $sql = q{
+                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                        FROM reserves r
+                        JOIN biblio b ON b.biblionumber = r.biblionumber
+                        WHERE r.borrowernumber = ?
+                          AND r.reserve_id = ?
+                          AND r.found = 'W'
+                    };
+                    @params = ($pid, $request_id);
+                } else {
+                    # Fallback to getting the first hold if no RequestID
+                    $sql = q{
+                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                        FROM reserves r
+                        JOIN biblio b ON b.biblionumber = r.biblionumber
+                        WHERE r.borrowernumber = ?
+                          AND r.found = 'W'
+                        ORDER BY r.reservedate DESC
+                        LIMIT 1
+                    };
+                    @params = ($pid);
+                }
+                
                 my $sth = $dbh->prepare($sql);
-                $sth->execute($pid);
+                $sth->execute(@params);
                 if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate) = $sth->fetchrow_array) {
                     $matched_item = {
                         itemnumber => $reserve_id,
