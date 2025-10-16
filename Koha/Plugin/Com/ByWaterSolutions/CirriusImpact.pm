@@ -2386,6 +2386,8 @@ sub _ci_backfill_additional_identifiers {
         
         # Only work with the new message types
         next unless (($letter||'') =~ /^(HOLD|HOLD_CHANGED|HOLD_REMINDER|MEMBERSHIP_EXPIRY|MEMBERSHIP_RENEWED|RENEWAL|WELCOME|ACCOUNT_CREDIT|ACCOUNT_DEBIT|ACCOUNT_PAYMENT|ACCOUNT_WRITEOFF|ACCOUNTS_SUMMARY|HOLDPLACED|HOLDPLACED_PATRON|HOLDDGST)$/);
+        
+        INFO("Processing $letter message in _ci_backfill_additional_identifiers");
 
         my $has_all = sub {
             my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
@@ -2432,6 +2434,8 @@ sub _ci_backfill_additional_identifiers {
                         expirationdate => $expirationdate
                     };
                     INFO("Found hold: $reserve_id, title: $title, hold till: $expirationdate");
+                } else {
+                    INFO("No hold found for borrowernumber=$pid");
                 }
                 $sth->finish;
                 
@@ -2609,13 +2613,16 @@ sub _ci_backfill_additional_identifiers {
             # Populate the section with found data
             if ($matched_item) {
                 my $title = $matched_item->{title} || '';
+                my $raw_date = $matched_item->{date} || '';
+                my $formatted_date = $self->_format_date($raw_date);
+                
                 $section->{itemsID}      ||= $matched_item->{itemnumber} || '';
                 $section->{biblionumber} ||= $matched_item->{biblionumber} || '';
                 $section->{title}        ||= $title;
-                $section->{date}         ||= $matched_item->{date} || '';
+                $section->{date}         ||= $formatted_date;
                 
                 my $message_id = $section->{meta}->{message_id} || $data->{message_type}->{message_id} || 0;
-                INFO("Backfill $letter: Set title to '$title' for message $message_id section=$section_name");
+                INFO("Backfill $letter: Set title to '$title', date to '$formatted_date' (raw: '$raw_date') for message $message_id section=$section_name");
                 
                 # Try to update message text if it has empty variables
                 if ($section->{text} && $section->{text} =~ /(is due|expires|renewed|welcome)/i) {
