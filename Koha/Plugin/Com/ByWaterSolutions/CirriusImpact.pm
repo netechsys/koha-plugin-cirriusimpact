@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.28";
+our $VERSION         = "1.1.29";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2385,7 +2385,7 @@ sub _ci_backfill_additional_identifiers {
         INFO("_ci_backfill_additional_identifiers: section=$section_name, letter=$letter");
         
         # Only work with the new message types
-        next unless (($letter||'') =~ /^(HOLD_CHANGED|HOLD_REMINDER|MEMBERSHIP_EXPIRY|MEMBERSHIP_RENEWED|RENEWAL|WELCOME|ACCOUNT_CREDIT|ACCOUNT_DEBIT|ACCOUNT_PAYMENT|ACCOUNT_WRITEOFF|ACCOUNTS_SUMMARY|HOLDPLACED|HOLDPLACED_PATRON|HOLDDGST)$/);
+        next unless (($letter||'') =~ /^(HOLD|HOLD_CHANGED|HOLD_REMINDER|MEMBERSHIP_EXPIRY|MEMBERSHIP_RENEWED|RENEWAL|WELCOME|ACCOUNT_CREDIT|ACCOUNT_DEBIT|ACCOUNT_PAYMENT|ACCOUNT_WRITEOFF|ACCOUNTS_SUMMARY|HOLDPLACED|HOLDPLACED_PATRON|HOLDDGST)$/);
 
         my $has_all = sub {
             my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
