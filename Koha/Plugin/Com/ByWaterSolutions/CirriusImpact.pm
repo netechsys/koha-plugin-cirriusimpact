@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.29";
+our $VERSION         = "1.1.30";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2409,7 +2409,7 @@ sub _ci_backfill_additional_identifiers {
             my $matched_item;
             
             # Handle different message types
-            if ($letter =~ /^HOLD_(CHANGED|REMINDER)$/) {
+            if ($letter eq 'HOLD' || $letter =~ /^HOLD_(CHANGED|REMINDER)$/) {
                 # For HOLD messages, query the reserves table
                 INFO("Querying holds for borrowernumber=$pid");
                 my $sql = q{
