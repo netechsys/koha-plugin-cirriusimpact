@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.27";
+our $VERSION         = "1.1.28";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -396,7 +396,7 @@ sub _generate_csv_output {
         $row_data{branch} = $transport_section->{branch} || '';
         $row_data{branchname} = $transport_section->{branchname} || '';
         $row_data{itemsID} = $transport_section->{itemsID} || '';
-        $row_data{date} = $transport_section->{date} || '';
+        $row_data{date} = $self->_format_date($transport_section->{date} || '');
         $row_data{title} = $transport_section->{title} || '';
         $row_data{DeliveryOptionID} = $transport_section->{DeliveryOptionID} || '';
         $row_data{LanguageID} = $transport_section->{LanguageID} || '';
@@ -727,7 +727,7 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 branchname         => defined $lib->{name}                ? $lib->{name}                : '',
                 itemsID            => defined $h_hold->{itemnumber}       ? $h_hold->{itemnumber}       : '',
                 biblionumber       => defined $h_hold->{biblionumber}     ? $h_hold->{biblionumber}     : '',
-                date               => defined $h_hold->{notificationdate} ? $h_hold->{notificationdate} : '',
+                date               => $self->_format_date(defined $h_hold->{notificationdate} ? $h_hold->{notificationdate} : ''),
                 title              => defined $h_biblio->{title}          ? $h_biblio->{title}          : '',
                 DeliveryOptionID   => '',
                 LanguageID         => '',
@@ -951,7 +951,7 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 $mf->{branchname}         = defined $lib->{name}                ? $lib->{name}                : '';
 
                 $mf->{itemsID}            = defined $h_hold->{biblionumber}     ? $h_hold->{biblionumber}     : '';
-                $mf->{date}               = defined $h_hold->{notificationdate} ? $h_hold->{notificationdate} : '';
+                $mf->{date}               = $self->_format_date(defined $h_hold->{notificationdate} ? $h_hold->{notificationdate} : '');
                 $mf->{title}              = defined $h_biblio->{title}          ? $h_biblio->{title}          : '';
 
                 $mf->{DeliveryOptionID}   = '';
@@ -1155,6 +1155,39 @@ sub _get_notification_type_and_level {
     my $mapping = $self->_load_notification_mapping();
     
     return $mapping->{$letter_code} || { type => 0, level => 0 };
+}
+
+# Format date to %d/%m/%Y format
+sub _format_date {
+    my ($self, $date_string) = @_;
+    return '' unless $date_string;
+    
+    # If it's already in the correct format, return as-is
+    if ($date_string =~ /^\d{2}\/\d{2}\/\d{4}$/) {
+        return $date_string;
+    }
+    
+    # Try to parse various date formats and convert to dd/mm/yyyy
+    my $formatted_date = '';
+    
+    # Handle MySQL date format (YYYY-MM-DD)
+    if ($date_string =~ /^(\d{4})-(\d{2})-(\d{2})/) {
+        $formatted_date = sprintf("%02d/%02d/%04d", $3, $2, $1);
+    }
+    # Handle MySQL datetime format (YYYY-MM-DD HH:MM:SS)
+    elsif ($date_string =~ /^(\d{4})-(\d{2})-(\d{2})\s/) {
+        $formatted_date = sprintf("%02d/%02d/%04d", $3, $2, $1);
+    }
+    # Handle other common formats
+    elsif ($date_string =~ /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) {
+        $formatted_date = sprintf("%02d/%02d/%04d", $1, $2, $3);
+    }
+    # If we can't parse it, return the original string
+    else {
+        $formatted_date = $date_string;
+    }
+    
+    return $formatted_date;
 }
 
 sub _load_notification_mapping {
@@ -2395,10 +2428,10 @@ sub _ci_backfill_additional_identifiers {
                         itemnumber => $reserve_id,
                         biblionumber => $biblionumber,
                         title => $title,
-                        date => $reservedate,
+                        date => $expirationdate,
                         expirationdate => $expirationdate
                     };
-                    INFO("Found hold: $reserve_id, title: $title, reserved: $reservedate");
+                    INFO("Found hold: $reserve_id, title: $title, hold till: $expirationdate");
                 }
                 $sth->finish;
                 
@@ -2540,10 +2573,10 @@ sub _ci_backfill_additional_identifiers {
                         itemnumber => $reserve_id,
                         biblionumber => $biblionumber,
                         title => $title,
-                        date => $reservedate,
+                        date => $expirationdate,
                         expirationdate => $expirationdate
                     };
-                    INFO("Found hold placed: $reserve_id, title: $title, reserved: $reservedate");
+                    INFO("Found hold placed: $reserve_id, title: $title, hold till: $expirationdate");
                 }
                 $sth->finish;
                 
