@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.30";
+our $VERSION         = "1.1.31";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
