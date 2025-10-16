@@ -2419,7 +2419,7 @@ sub _ci_backfill_additional_identifiers {
                     FROM reserves r
                     JOIN biblio b ON b.biblionumber = r.biblionumber
                     WHERE r.borrowernumber = ?
-                      AND r.found IS NULL
+                      AND r.found = 'W'
                     ORDER BY r.reservedate DESC
                     LIMIT 1
                 };
