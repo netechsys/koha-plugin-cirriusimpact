@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.31";
+our $VERSION         = "1.1.32";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -323,7 +323,7 @@ sub _generate_csv_output {
     my @headers = qw(
         commType language notificationType notificationLevel patronBarCode 
         STAB_userSalutation patronFirstName patronLastName phone email 
-        branch branchname itemsID date title DeliveryOptionID LanguageID 
+        LibraryCode branch branchname itemsID date title DeliveryOptionID LanguageID 
         NotificationTypeID ReportingOrgID PatronID ItemRecordID RequestID 
         PickupAreaDescription TxnID AccountBalance kohaNotificationType
     );
@@ -393,6 +393,7 @@ sub _generate_csv_output {
         $row_data{patronLastName} = $transport_section->{patronLastName} || '';
         $row_data{phone} = $transport_section->{phone} || '';
         $row_data{email} = $transport_section->{email} || '';
+        $row_data{LibraryCode} = $transport_section->{branch} || '';
         $row_data{branch} = $transport_section->{branch} || '';
         $row_data{branchname} = $transport_section->{branchname} || '';
         $row_data{itemsID} = $transport_section->{itemsID} || '';
