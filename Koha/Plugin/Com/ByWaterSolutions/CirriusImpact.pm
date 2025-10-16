@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.33";
+our $VERSION         = "1.1.34";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2415,14 +2415,27 @@ sub _ci_backfill_additional_identifiers {
             if ($letter eq 'HOLD' || $letter =~ /^HOLD_(CHANGED|REMINDER)$/) {
                 # For HOLD messages, query the reserves table
                 INFO("Querying holds for borrowernumber=$pid");
-                # Try to get reserve_id from the message content
+                # Try to get reserve_id from the message content by querying the database
                 my $reserve_id = '';
-                if ($data->{content}) {
-                    if ($data->{content} =~ /hold:\s*(\d+)/) {
-                        $reserve_id = $1;
+                my $message_id = $section->{meta}->{message_id} || '';
+                
+                if ($message_id) {
+                    # Query the message_queue table to get the original content
+                    my $content_sql = q{SELECT content FROM message_queue WHERE message_id = ?};
+                    my $content_sth = $dbh->prepare($content_sql);
+                    $content_sth->execute($message_id);
+                    if (my ($content) = $content_sth->fetchrow_array) {
+                        if ($content && $content =~ /hold:\s*(\d+)/) {
+                            $reserve_id = $1;
+                        }
+                        INFO("Extracted reserve_id: $reserve_id from message_id: $message_id");
+                    } else {
+                        INFO("No content found for message_id $message_id");
                     }
+                    $content_sth->finish;
+                } else {
+                    INFO("No message_id available for reserve_id extraction");
                 }
-                INFO("Reserve ID from content: $reserve_id, message_id: " . ($section->{meta}->{message_id} || ''));
                 
                 my $sql;
                 my @params;
