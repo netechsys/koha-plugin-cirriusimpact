@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.34";
+our $VERSION         = "1.1.35";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2443,7 +2443,7 @@ sub _ci_backfill_additional_identifiers {
                 if ($reserve_id) {
                     # If we have a specific reserve_id, query for that specific hold
                     $sql = q{
-                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate, r.itemnumber
                         FROM reserves r
                         JOIN biblio b ON b.biblionumber = r.biblionumber
                         WHERE r.borrowernumber = ?
@@ -2454,7 +2454,7 @@ sub _ci_backfill_additional_identifiers {
                 } else {
                     # Fallback to getting the first hold if no reserve_id
                     $sql = q{
-                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                        SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate, r.itemnumber
                         FROM reserves r
                         JOIN biblio b ON b.biblionumber = r.biblionumber
                         WHERE r.borrowernumber = ?
@@ -2467,15 +2467,15 @@ sub _ci_backfill_additional_identifiers {
                 
                 my $sth = $dbh->prepare($sql);
                 $sth->execute(@params);
-                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate) = $sth->fetchrow_array) {
+                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate, $itemnumber) = $sth->fetchrow_array) {
                     $matched_item = {
-                        itemnumber => $reserve_id,
+                        itemnumber => $itemnumber,
                         biblionumber => $biblionumber,
                         title => $title,
                         date => $expirationdate,
                         expirationdate => $expirationdate
                     };
-                    INFO("Found hold: $reserve_id, title: $title, hold till: $expirationdate");
+                    INFO("Found hold: $reserve_id, itemnumber: $itemnumber, title: $title, hold till: $expirationdate");
                 } else {
                     INFO("No hold found for borrowernumber=$pid" . ($reserve_id ? " with reserve_id=$reserve_id" : ""));
                 }
