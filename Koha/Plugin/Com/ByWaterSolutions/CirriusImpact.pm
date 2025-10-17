@@ -35,7 +35,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.1.35";
+our $VERSION         = "1.1.36";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -2605,7 +2605,7 @@ sub _ci_backfill_additional_identifiers {
                 # For hold placed messages, query the most recent hold
                 INFO("Querying recent hold for borrowernumber=$pid");
                 my $sql = q{
-                    SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate
+                    SELECT r.reserve_id, r.biblionumber, b.title, r.reservedate, r.expirationdate, r.itemnumber
                     FROM reserves r
                     JOIN biblio b ON b.biblionumber = r.biblionumber
                     WHERE r.borrowernumber = ?
@@ -2614,15 +2614,15 @@ sub _ci_backfill_additional_identifiers {
                 };
                 my $sth = $dbh->prepare($sql);
                 $sth->execute($pid);
-                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate) = $sth->fetchrow_array) {
+                if (my ($reserve_id, $biblionumber, $title, $reservedate, $expirationdate, $itemnumber) = $sth->fetchrow_array) {
                     $matched_item = {
-                        itemnumber => $reserve_id,
+                        itemnumber => $itemnumber,
                         biblionumber => $biblionumber,
                         title => $title,
                         date => $expirationdate,
                         expirationdate => $expirationdate
                     };
-                    INFO("Found hold placed: $reserve_id, title: $title, hold till: $expirationdate");
+                    INFO("Found hold placed: $reserve_id, itemnumber: $itemnumber, title: $title, hold till: $expirationdate");
                 }
                 $sth->finish;
                 
@@ -2630,7 +2630,7 @@ sub _ci_backfill_additional_identifiers {
                 # For HOLDDGST messages, query waiting holds (holds that are ready for pickup)
                 INFO("Querying waiting holds for borrowernumber=$pid");
                 my $sql = q{
-                    SELECT r.reserve_id, r.biblionumber, b.title, r.waitingdate, r.expirationdate
+                    SELECT r.reserve_id, r.biblionumber, b.title, r.waitingdate, r.expirationdate, r.itemnumber
                     FROM reserves r
                     JOIN biblio b ON b.biblionumber = r.biblionumber
                     WHERE r.borrowernumber = ? AND r.found = 'W'
@@ -2639,15 +2639,15 @@ sub _ci_backfill_additional_identifiers {
                 };
                 my $sth = $dbh->prepare($sql);
                 $sth->execute($pid);
-                if (my ($reserve_id, $biblionumber, $title, $waitingdate, $expirationdate) = $sth->fetchrow_array) {
+                if (my ($reserve_id, $biblionumber, $title, $waitingdate, $expirationdate, $itemnumber) = $sth->fetchrow_array) {
                     $matched_item = {
-                        itemnumber => $reserve_id,
+                        itemnumber => $itemnumber,
                         biblionumber => $biblionumber,
                         title => $title,
                         date => $waitingdate,
                         expirationdate => $expirationdate
                     };
-                    INFO("Found waiting hold: $reserve_id, title: $title, waiting since: $waitingdate");
+                    INFO("Found waiting hold: $reserve_id, itemnumber: $itemnumber, title: $title, waiting since: $waitingdate");
                 }
                 $sth->finish;
             }
