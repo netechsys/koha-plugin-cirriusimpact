@@ -9,7 +9,19 @@ CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpac
 | Remote | Use |
 |---|---|
 | `origin` (GitLab) | Daily development, all commits on `main` |
-| `github` | Public release **tags only** (e.g. `v1.2.2`) + `.kpz` |
+| `github` | Public `main` (docs, issue templates) + release **tags** (e.g. `v1.2.2`) + `.kpz` |
+
+## Support and troubleshooting (public)
+
+| Resource | Link |
+|---|---|
+| **Issues** | https://github.com/netechsys/koha-plugin-cirriusimpact/issues |
+| **Discussions** | https://github.com/netechsys/koha-plugin-cirriusimpact/discussions |
+| **Wiki** | https://github.com/netechsys/koha-plugin-cirriusimpact/wiki |
+| **Releases / .kpz** | https://github.com/netechsys/koha-plugin-cirriusimpact/releases |
+| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+The repository is **public** — anyone can read source, open issues, and participate in discussions.
 
 ## Build install package
 
@@ -41,4 +53,10 @@ export GITHUB_TOKEN=ghp_...   # classic PAT with repo scope (or fine-grained: co
 python3 scripts/publish_github_release.py v1.2.2
 ```
 
-The script pushes the tag over **HTTPS using the token** (SSH not required). Push **tags only** to GitHub — not `main`.
+The script pushes the tag over **HTTPS using the token** (SSH not required).
+
+Sync public `main` (issue templates, CONTRIBUTING, docs):
+
+```bash
+python3 scripts/sync_github_main.py
+```
