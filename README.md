@@ -1,6 +1,6 @@
 # koha-plugin-cirriusimpact
 
-CirriusImpact Koha plugin — exports patron notices to CirriusImpact for SMS/Voice (shared with Koha / ByWater).
+CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpact SMS/Voice service (shared with Koha / ByWater).
 
 **Canonical source:** this repository (`Devel/Management/CI Plugin` on the management server).
 

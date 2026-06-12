@@ -24,7 +24,7 @@ sub _resolve_message_for_status_update {
     my $message = Koha::Notice::Messages->find($id);
     return $message if $message;
 
-    # Hold CSV rows put reserve_id in RequestID; Polaris may call back with that id.
+    # Hold CSV rows put reserve_id in RequestID; CirriusImpact may call back with that id.
     my $dbh = C4::Context->dbh;
     return unless $dbh;
 

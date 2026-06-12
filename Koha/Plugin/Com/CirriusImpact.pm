@@ -1183,7 +1183,7 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                 ItemRecordID       => '',
                 RequestID          => defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '',
                 PickupAreaDescription => '',
-                # TxnID carries message_queue.message_id for Polaris status callbacks (RequestID may be reserve_id).
+                # TxnID carries message_queue.message_id for CirriusImpact status callbacks (RequestID may be reserve_id).
                 TxnID              => defined $data->{message_type}->{message_id} ? $data->{message_type}->{message_id} : '',
                 AccountBalance     => '',
                 # kohaNotificationType is the Koha letter code (moved to end)

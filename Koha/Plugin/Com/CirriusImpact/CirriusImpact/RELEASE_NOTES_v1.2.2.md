@@ -12,7 +12,7 @@ When Koha generated **multiple individual PREDUE** notices for one patron (one `
 - **Correct** `messageText` per row (Koha template rendered each title)
 - **Wrong** `itemsID` and `title` on every row — always the patron's **earliest-due** item
 
-Polaris duplicate blocking and rollup then treated distinct notices as duplicates.
+CirriusImpact duplicate blocking and rollup then treated distinct notices as duplicates.
 
 **Example (KMTPL):** three PREDUE rows for one patron — all showed the same `itemsID` / `title` while `messageText` named three different books.
 
