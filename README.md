@@ -2,9 +2,14 @@
 
 CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpact SMS/Voice service (shared with Koha / ByWater).
 
-**Canonical source:** this repository (`Devel/Management/CI Plugin` on the management server).
+**Canonical source (private Devel):** GitLab — https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact
 
-**GitLab:** https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact
+**Public releases (production):** GitHub — https://github.com/netechsys/koha-plugin-cirriusimpact
+
+| Remote | Use |
+|---|---|
+| `origin` (GitLab) | Daily development, all commits on `main` |
+| `github` | Public release **tags only** (e.g. `v1.2.2`) + `.kpz` |
 
 ## Build install package
 
@@ -23,8 +28,18 @@ See `Koha/Plugin/Com/CirriusImpact/CirriusImpact/INSTALL.md` and `QUICKSTART.md`
 
 ## Releases
 
-Tagged releases and `.kpz` assets are published on the [GitLab releases page](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases).
+**Private (GitLab):** [GitLab releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 
 ```bash
 python3 scripts/create_gitlab_release.py v1.2.2
 ```
+
+**Public (GitHub):** [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+
+```bash
+# One-time: git remote add github git@github.com:netechsys/koha-plugin-cirriusimpact.git
+export GITHUB_TOKEN=ghp_...   # repo scope, or use SSH deploy key
+python3 scripts/publish_github_release.py v1.2.2
+```
+
+Push **tags only** to GitHub — do not push `main` unless you intend to expose all Devel history.
