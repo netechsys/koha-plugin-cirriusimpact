@@ -27,6 +27,33 @@ GITHUB_URL = f"https://github.com/{GITHUB_REPO}"
 TOKEN = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
 
 
+def _load_token_from_env_files() -> str:
+    """Load GITHUB_TOKEN from shell env files if not already exported."""
+    if TOKEN:
+        return TOKEN
+    for path in (
+        Path.home() / ".multiserver_gitlab_env",
+        Path.home() / ".github_env",
+    ):
+        if not path.is_file():
+            continue
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for key in ("GITHUB_TOKEN", "GH_TOKEN"):
+                m = re.match(rf'export\s+{key}="([^"]+)"', line)
+                if m:
+                    return m.group(1)
+                m = re.match(rf"export\s+{key}=([^\s#]+)", line)
+                if m:
+                    return m.group(1).strip("'\"")
+    return ""
+
+
+TOKEN = _load_token_from_env_files() or TOKEN
+
+
 def _run(cmd: list[str], cwd: Path, env: dict | None = None) -> None:
     print("+", " ".join(cmd))
     subprocess.run(cmd, cwd=cwd, check=True, env=env)
@@ -136,7 +163,13 @@ def main() -> int:
     bare = tag.lstrip("v")
 
     if not TOKEN:
-        print("Error: set GITHUB_TOKEN (or GH_TOKEN) with repo scope", file=sys.stderr)
+        print(
+            "Error: set GITHUB_TOKEN (classic PAT with repo scope).\n"
+            "  export GITHUB_TOKEN=ghp_...\n"
+            "  or add to ~/.multiserver_gitlab_env:\n"
+            '    export GITHUB_TOKEN="ghp_..."',
+            file=sys.stderr,
+        )
         return 1
 
     main_pm = PLUGIN_ROOT / "Koha/Plugin/Com/CirriusImpact.pm"
