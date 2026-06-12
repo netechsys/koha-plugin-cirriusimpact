@@ -37,26 +37,3 @@ Produces `koha-plugin-cirriusimpact-v{VERSION}.kpz` at the repo root (version fr
 2. Reload: `sudo koha-shell <instance> -c "perl -MKoha::Plugin -e 'Koha::Plugins->reload'"`
 
 See `Koha/Plugin/Com/CirriusImpact/CirriusImpact/INSTALL.md` and `QUICKSTART.md`.
-
-## Releases
-
-**Private (GitLab):** [GitLab releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
-
-```bash
-python3 scripts/create_gitlab_release.py v1.2.2
-```
-
-**Public (GitHub):** [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
-
-```bash
-export GITHUB_TOKEN=ghp_...   # classic PAT with repo scope (or fine-grained: contents + releases)
-python3 scripts/publish_github_release.py v1.2.2
-```
-
-The script pushes the tag over **HTTPS using the token** (SSH not required).
-
-Sync public `main` (issue templates, CONTRIBUTING, docs):
-
-```bash
-python3 scripts/sync_github_main.py
-```
