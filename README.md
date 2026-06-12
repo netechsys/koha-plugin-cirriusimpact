@@ -37,9 +37,8 @@ python3 scripts/create_gitlab_release.py v1.2.2
 **Public (GitHub):** [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
 
 ```bash
-# One-time: git remote add github git@github.com:netechsys/koha-plugin-cirriusimpact.git
-export GITHUB_TOKEN=ghp_...   # repo scope, or use SSH deploy key
+export GITHUB_TOKEN=ghp_...   # classic PAT with repo scope (or fine-grained: contents + releases)
 python3 scripts/publish_github_release.py v1.2.2
 ```
 
-Push **tags only** to GitHub — do not push `main` unless you intend to expose all Devel history.
+The script pushes the tag over **HTTPS using the token** (SSH not required). Push **tags only** to GitHub — not `main`.
