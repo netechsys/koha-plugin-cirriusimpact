@@ -23,6 +23,16 @@ ODUE3:
   level: 3
   description: "Third overdue notice"
 
+DUE:
+  type: 1
+  level: 4
+  description: "Overdue notice (KMTPL overduerules letter code)"
+
+DUEDGST:
+  type: 1
+  level: 4
+  description: "Overdue digest (if configured)"
+
 # Type 2: Hold Notices
 HOLD:
   type: 2

@@ -27,6 +27,15 @@ CirriusImpact duplicate blocking and rollup then treated distinct notices as dup
 - Fallback: `yaml_doc_index` when text match fails
 - `has_all` early exit uses `next` per transport section (not `return` from entire routine)
 
+### notification_mapping: DUE / DUEDGST (KMTPL)
+
+Libraries that use **`DUE`** (not `ODUE`) in Koha **overduerules** had CSV rows rejected by Polaris with empty `notificationType`.
+
+- **ADDED:** `DUE` → Polaris type **1**, level **4**
+- **ADDED:** `DUEDGST` → Polaris type **1**, level **4** (if used)
+
+Re-upload this **v1.2.2** KPZ to pick up the updated `notification_mapping.yml`.
+
 ### Also in this track
 
 - **v1.2.1:** `TxnID` in CSV export (`message_queue.message_id`); API status fallback for holds

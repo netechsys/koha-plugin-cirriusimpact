@@ -1920,6 +1920,8 @@ sub _get_default_notification_mapping {
         'ODUE'  => { type => 1, level => 1 },
         'ODUE2' => { type => 1, level => 2 },
         'ODUE3' => { type => 1, level => 3 },
+        'DUE'      => { type => 1, level => 4 },
+        'DUEDGST'  => { type => 1, level => 4 },
         
         # Hold Notices - Type 2
         'HOLD'              => { type => 2, level => 1 },
