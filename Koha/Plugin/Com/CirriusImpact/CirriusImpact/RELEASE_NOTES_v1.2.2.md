@@ -29,10 +29,10 @@ CirriusImpact duplicate blocking and rollup then treated distinct notices as dup
 
 ### notification_mapping: DUE / DUEDGST (KMTPL)
 
-Libraries that use **`DUE`** (not `ODUE`) in Koha **overduerules** had CSV rows rejected by Polaris with empty `notificationType`.
+Libraries that use **`DUE`** (not `ODUE`) in Koha **overduerules** had CSV rows rejected by CirriusImpact with empty `notificationType`.
 
-- **ADDED:** `DUE` → Polaris type **1**, level **4**
-- **ADDED:** `DUEDGST` → Polaris type **1**, level **4** (if used)
+- **ADDED:** `DUE` → CirriusImpact type **1**, level **4**
+- **ADDED:** `DUEDGST` → CirriusImpact type **1**, level **4** (if used)
 
 Re-upload this **v1.2.2** KPZ to pick up the updated `notification_mapping.yml`.
 

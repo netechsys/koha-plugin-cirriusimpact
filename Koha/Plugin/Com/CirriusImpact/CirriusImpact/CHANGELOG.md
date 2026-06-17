@@ -1,8 +1,8 @@
 ## 1.2.2 - 2026-06-12
 
 ### notification_mapping: DUE and DUEDGST (KMTPL)
-- **ADDED:** `DUE` and `DUEDGST` letter codes map to Polaris notification type **1**, level **4**.
-- **FIXED:** KMTPL overdue exports using letter code `DUE` no longer leave `notificationType` blank (Polaris CSV validation rejection).
+- **ADDED:** `DUE` and `DUEDGST` letter codes map to CirriusImpact notification type **1**, level **4**.
+- **FIXED:** KMTPL overdue exports using letter code `DUE` no longer leave `notificationType` blank (CirriusImpact CSV validation rejection).
 
 ### PREDUE CSV: correct itemsID/title per notice row
 - **FIXED**: Single PREDUE exports repeated the patron's earliest-due `itemsID` and `title` on every CSV row while `messageText` was correct per item (KMTPL multi-item PREDUE class).
