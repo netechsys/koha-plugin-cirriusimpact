@@ -24,7 +24,7 @@ my $level = $result->{level}; # Returns 2
 | ODUE         | 1     | First overdue notice |
 | ODUE2        | 2     | Second overdue notice |
 | ODUE3        | 3     | Third overdue notice |
-| DUE          | 4     | Overdue notice (e.g. KMTPL overduerules letter code) |
+| DUE          | 4     | Overdue notice (some sites use `DUE` instead of `ODUE` in overduerules) |
 | DUEDGST      | 4     | Overdue digest (if configured) |
 
 ### Type 2: Hold Notices

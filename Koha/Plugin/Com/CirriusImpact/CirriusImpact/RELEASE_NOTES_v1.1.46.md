@@ -13,7 +13,7 @@ When Koha generated **multiple individual PREDUE** notices for one patron (one `
 
 CirriusImpact duplicate blocking and rollup then treated distinct notices as duplicates.
 
-**Example (KMTPL):** three PREDUE rows for JOANN LAYTON — all showed `itemsID=747281` / *Gone before goodbye* while `messageText` named *Gone before goodbye*, *The other Einstein*, and *The Martian*.
+**Example:** three PREDUE rows for one patron — all showed the same `itemsID` / `title` while `messageText` named three different titles.
 
 ### Root cause
 

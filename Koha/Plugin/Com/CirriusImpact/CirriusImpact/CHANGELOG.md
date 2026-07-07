@@ -1,18 +1,18 @@
 ## 1.2.3 - 2026-07-07
 
-### HOLD CSV: wrong overdue messageText when Koha stores single-line YAML (KMTPL)
+### HOLD CSV: wrong overdue messageText when Koha stores single-line YAML
 - **FIXED:** Single-line `message_queue.content` (invalid YAML) no longer drops `sms.text` / `call.script`; content is normalized before `YAML::XS::Load`, with regex recovery and logging on failure.
 - **FIXED:** Emergency SMS fallback is now **letter-code aware** (HOLD vs ODUE/DUE vs PREDUE, etc.); overdue wording is no longer applied to HOLD notices.
 - **ADDED:** Phone (`call.script`) fallback when script is blank after parse; tries Koha `letter` table template before generated fallback text.
 
 ## 1.2.2 - 2026-06-12
 
-### notification_mapping: DUE and DUEDGST (KMTPL)
+### notification_mapping: DUE and DUEDGST
 - **ADDED:** `DUE` and `DUEDGST` letter codes map to CirriusImpact notification type **1**, level **4**.
-- **FIXED:** KMTPL overdue exports using letter code `DUE` no longer leave `notificationType` blank (CirriusImpact CSV validation rejection).
+- **FIXED:** Overdue exports using letter code `DUE` no longer leave `notificationType` blank (CirriusImpact CSV validation rejection).
 
 ### PREDUE CSV: correct itemsID/title per notice row
-- **FIXED**: Single PREDUE exports repeated the patron's earliest-due `itemsID` and `title` on every CSV row while `messageText` was correct per item (KMTPL multi-item PREDUE class).
+- **FIXED**: Single PREDUE exports repeated the patron's earliest-due `itemsID` and `title` on every CSV row while `messageText` was correct per item (multi-item PREDUE class).
 - **ENHANCED**: `_ci_backfill_predue_identifiers()` now extracts the title from rendered SMS/phone text (`due soon:`, `will be due soon:`, `is due`, etc.) and matches it to the patron's upcoming due items (same approach as CHECKOUT/ODUE).
 - **ENHANCED**: Fallback uses `yaml_doc_index` when text extraction does not match.
 - **FIXED**: `has_all` early exit now uses `next` per transport section instead of `return` from the whole backfill routine.

@@ -13,7 +13,7 @@ When Koha generated **multiple individual PREDUE** notices for one patron (one `
 
 CirriusImpact duplicate blocking and rollup then treated distinct notices as duplicates.
 
-**Example (KMTPL):** three PREDUE rows for one patron — all showed the same `itemsID` / `title` while `messageText` named three different books.
+**Example:** three PREDUE rows for one patron — all showed the same `itemsID` / `title` while `messageText` named three different books.
 
 ### Root cause
 
@@ -26,7 +26,7 @@ CirriusImpact duplicate blocking and rollup then treated distinct notices as dup
 - Fallback: `yaml_doc_index` when text match fails
 - `has_all` early exit uses `next` per transport section (not `return` from entire routine)
 
-### notification_mapping: DUE / DUEDGST (KMTPL)
+### notification_mapping: DUE / DUEDGST
 
 Libraries that use **`DUE`** (not `ODUE`) in Koha **overduerules** had CSV rows rejected by CirriusImpact with empty `notificationType`.
 

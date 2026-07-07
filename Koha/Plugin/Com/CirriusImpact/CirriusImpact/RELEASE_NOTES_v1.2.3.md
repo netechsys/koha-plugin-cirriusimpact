@@ -3,7 +3,7 @@
 **Date:** 2026-07-07  
 **GitHub:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.2.3
 
-## HOLD notices: wrong overdue messageText on CSV export (KMTPL / Middletown)
+## HOLD notices: wrong overdue messageText on CSV export
 
 ### Problem
 
@@ -17,7 +17,7 @@ Koha `message_queue` content **did** include the correct scripts, for example:
 
 ```yaml
 sms:
-  text: "Dear THOMAS GEDEN, Your hold for This is Spın̈al Tap ... is available for pickup."
+  text: "Dear PATRON, Your hold for Example Title ... is available for pickup."
 call:
   script: "Your item is available for pick up. Title: ..."
 ```
