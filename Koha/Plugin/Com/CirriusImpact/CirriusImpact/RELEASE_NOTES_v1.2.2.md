@@ -1,7 +1,6 @@
 # CirriusImpact Koha Plugin v1.2.2
 
-**Date:** 2026-06-12  
-**GitLab:** https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.2.2
+**Date:** 2026-06-12
 
 ## PREDUE: fix duplicate itemsID/title on multi-item exports
 

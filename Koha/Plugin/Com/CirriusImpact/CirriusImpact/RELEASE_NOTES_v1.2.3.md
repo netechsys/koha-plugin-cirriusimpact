@@ -1,7 +1,6 @@
 # CirriusImpact Koha Plugin v1.2.3
 
 **Date:** 2026-07-07  
-**GitLab:** https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.2.3  
 **GitHub:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.2.3
 
 ## HOLD notices: wrong overdue messageText on CSV export (KMTPL / Middletown)

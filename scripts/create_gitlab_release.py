@@ -66,7 +66,7 @@ def main() -> int:
         print(f"Missing {kpz}; run scripts/build_kpz.py first", file=sys.stderr)
         return 1
 
-    notes_path = PLUGIN_ROOT / "Koha/Plugin/Com/CirriusImpact/CirriusImpact/RELEASE_NOTES_v1.2.2.md"
+    notes_path = PLUGIN_ROOT / f"Koha/Plugin/Com/CirriusImpact/CirriusImpact/RELEASE_NOTES_v{bare}.md"
     if not notes_path.is_file():
         notes_path = PLUGIN_ROOT / f"Koha/Plugin/Com/CirriusImpact/CirriusImpact/RELEASE_NOTES_v{bare}.md"
     description = notes_path.read_text() if notes_path.is_file() else f"Release {tag}"
