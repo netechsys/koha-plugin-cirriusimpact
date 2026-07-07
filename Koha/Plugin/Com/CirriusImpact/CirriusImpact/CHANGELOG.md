@@ -1,3 +1,10 @@
+## 1.2.3 - 2026-07-07
+
+### HOLD CSV: wrong overdue messageText when Koha stores single-line YAML (KMTPL)
+- **FIXED:** Single-line `message_queue.content` (invalid YAML) no longer drops `sms.text` / `call.script`; content is normalized before `YAML::XS::Load`, with regex recovery and logging on failure.
+- **FIXED:** Emergency SMS fallback is now **letter-code aware** (HOLD vs ODUE/DUE vs PREDUE, etc.); overdue wording is no longer applied to HOLD notices.
+- **ADDED:** Phone (`call.script`) fallback when script is blank after parse; tries Koha `letter` table template before generated fallback text.
+
 ## 1.2.2 - 2026-06-12
 
 ### notification_mapping: DUE and DUEDGST (KMTPL)

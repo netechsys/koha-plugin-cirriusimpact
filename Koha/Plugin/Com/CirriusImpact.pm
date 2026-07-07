@@ -48,7 +48,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.2.2";
+our $VERSION         = "1.2.3";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -373,6 +373,196 @@ sub _render_any {
         return \%out;
     } else {
         return $value;
+    }
+}
+
+# Koha sometimes stores CirriusImpact notice YAML on one line (invalid for YAML::XS).
+# Re-break known keys onto separate lines before parsing.
+sub _normalize_cirriusimpact_yaml_content {
+    my ($content) = @_;
+    return $content unless defined $content && $content =~ /\S/;
+    return $content if $content =~ /\n/;
+    return $content unless $content =~ /^\s*---\s+CirriusImpact:/;
+
+    my $body = $content;
+    $body =~ s/^\s*---\s*//;
+    $body =~ s/\s*---\s*$//;
+    $body =~ s/\s+(patron|hold|holds|sms|call|email|whatsapp):/\n$1:/g;
+    $body =~ s/(sms|call|email|whatsapp):\s*(text|script|body|subject|reference|to):/$1:\n  $2:/g;
+    return "---\n$body\n---\n";
+}
+
+sub _recover_inline_cirriusimpact_yaml {
+    my ($content) = @_;
+    return undef unless defined $content && $content =~ /CirriusImpact:\s*yes/i;
+
+    my %doc = ( CirriusImpact => 'yes' );
+    if ($content =~ /\bhold:\s*(\d+)/) {
+        $doc{hold} = $1;
+    }
+    if ($content =~ /\bpatron:\s*(\d+)/) {
+        $doc{patron} = $1;
+    }
+    if ($content =~ /\bsms:\s*text:\s*"((?:[^"\\]|\\.)*)"/s) {
+        my $text = $1;
+        $text =~ s/\\"/"/g;
+        $doc{sms} = { text => $text };
+    }
+    if ($content =~ /\bcall:\s*script:\s*"((?:[^"\\]|\\.)*)"/s) {
+        my $script = $1;
+        $script =~ s/\\"/"/g;
+        $doc{call} = { script => $script };
+    }
+    return \%doc if $doc{hold} || $doc{sms} || $doc{call};
+    return undef;
+}
+
+sub _load_cirriusimpact_yaml_documents {
+    my ($self, $content, $log, $message_id) = @_;
+    $content = _normalize_cirriusimpact_yaml_content($content);
+
+    my @yamls;
+    my $parse_error;
+    try { @yamls = Load $content; }
+    catch { $parse_error = "$_"; @yamls = (); };
+
+    @yamls = grep { ref($_) eq 'HASH' } @yamls;
+
+    if (!@yamls) {
+        my $recovered = _recover_inline_cirriusimpact_yaml($content);
+        if ($recovered) {
+            $log->warn(
+                "CirriusImpact message $message_id: YAML parse failed; recovered sms/call/hold from inline content"
+                . ($parse_error ? " ($parse_error)" : '')
+            );
+            push @yamls, $recovered;
+        } elsif ($parse_error) {
+            $log->error("CirriusImpact message $message_id: YAML parse failed: $parse_error");
+        }
+    }
+
+    return @yamls;
+}
+
+sub _ci_notice_context_fields {
+    my ($data) = @_;
+    my $brname = $data->{library}->{branchname} // $data->{sms}->{branchname}
+        // $data->{call}->{branchname} // '';
+    my $fname  = $data->{patron}->{firstname} // $data->{sms}->{patronFirstName}
+        // $data->{call}->{patronFirstName} // '';
+    my $phone  = $data->{library}->{branchphone} // $data->{library}->{phone}
+        // $data->{sms}->{phone} // '';
+    my $title  = $data->{sms}->{title} // $data->{call}->{title} // '';
+    return ($brname, $fname, $phone, $title);
+}
+
+sub _ci_sms_fallback_message {
+    my ($self, $letter_code, $data) = @_;
+    my ($brname, $fname, $phone, $title) = _ci_notice_context_fields($data);
+    $brname ||= 'Your Library';
+    $fname  ||= 'Patron';
+    $title  ||= 'your item';
+    my $lc = uc($letter_code || '');
+
+    if ($lc =~ /^HOLD/) {
+        return sprintf(
+            '[%s] %s, Your hold for %s is available for pickup. Please pick up at %s. Questions? Call %s.',
+            $brname, $fname, $title, $brname, ($phone || '')
+        );
+    }
+    if ($lc =~ /^ODUE|^DUE/) {
+        return sprintf(
+            '[%s] %s, You have item(s) that are now overdue: %s. Please return them to %s. Questions? Call %s.',
+            $brname, $fname, $title, $brname, ($phone || '')
+        );
+    }
+    if ($lc =~ /^PREDUE/) {
+        return sprintf(
+            '[%s] %s, You have item(s) due soon: %s. Please return them to %s. Questions? Call %s.',
+            $brname, $fname, $title, $brname, ($phone || '')
+        );
+    }
+    if ($lc eq 'CHECKOUT') {
+        return sprintf('[%s] %s, Thank you for checking out: %s.', $brname, $fname, $title);
+    }
+    if ($lc eq 'CHECKIN') {
+        return sprintf('[%s] %s, Thank you for returning: %s.', $brname, $fname, $title);
+    }
+    return sprintf(
+        '[%s] %s, Library notice regarding: %s. Questions? Call %s.',
+        $brname, $fname, $title, ($phone || '')
+    );
+}
+
+sub _ci_call_fallback_message {
+    my ($self, $letter_code, $data) = @_;
+    my ($brname, $fname, $phone, $title) = _ci_notice_context_fields($data);
+    $brname ||= 'your library';
+    $fname  ||= 'Patron';
+    $title  ||= 'your item';
+    my $lc = uc($letter_code || '');
+
+    if ($lc =~ /^HOLD/) {
+        return sprintf(
+            'Hello %s. %s. Your hold is ready for pickup. Title: %s. Call %s for help.',
+            $fname, $brname, $title, ($phone || $brname)
+        );
+    }
+    if ($lc =~ /^ODUE|^DUE/) {
+        return sprintf(
+            'Hello %s. %s. You have overdue items. Title: %s. Please return them soon. Call %s.',
+            $fname, $brname, $title, ($phone || $brname)
+        );
+    }
+    if ($lc =~ /^PREDUE/) {
+        return sprintf(
+            'Hello %s. %s. You have items due soon. Title: %s. Call %s.',
+            $fname, $brname, $title, ($phone || $brname)
+        );
+    }
+    return sprintf(
+        'Hello %s. %s. Library notice. Title: %s. Call %s.',
+        $fname, $brname, $title, ($phone || $brname)
+    );
+}
+
+sub _ci_apply_transport_fallback_text {
+    my ($self, $data, $letter_code, $transport) = @_;
+    my ($brname, $fname, $phone, $title) = _ci_notice_context_fields($data);
+    $letter_code ||= $data->{message_type}->{letter_code} // '';
+
+    if ($transport eq 'sms') {
+        return if defined $data->{sms}->{text} && $data->{sms}->{text} ne '';
+
+        my $tpl = $self->_get_notice_template($letter_code, 'sms');
+        if ($tpl) {
+            my $rendered = $self->_render_notice_template($tpl, $data);
+            if (defined $rendered && $rendered ne '') {
+                $data->{sms}->{text} = $rendered;
+                return;
+            }
+        }
+
+        my $fallback = $self->_ci_sms_fallback_message($letter_code, $data);
+        $data->{sms}->{text} = $self->_ci_insert_title_into_text($fallback, $title);
+        return;
+    }
+
+    if ($transport eq 'phone') {
+        $data->{call} //= {};
+        return if defined $data->{call}->{script} && $data->{call}->{script} ne '';
+
+        my $tpl = $self->_get_notice_template($letter_code, 'phone');
+        if ($tpl) {
+            my $rendered = $self->_render_notice_template($tpl, $data);
+            if (defined $rendered && $rendered ne '') {
+                $data->{call}->{script} = $rendered;
+                return;
+            }
+        }
+
+        my $fallback = $self->_ci_call_fallback_message($letter_code, $data);
+        $data->{call}->{script} = $self->_ci_insert_title_into_text($fallback, $title);
     }
 }
 
@@ -956,9 +1146,7 @@ sub before_send_messages {
             # Koha sometimes concatenates multiple notices with ------
             $content =~ s/------/---/g;
 
-            my @yamls;
-            try { @yamls = Load $content; }
-            catch { @yamls = (); };
+            my @yamls = $self->_load_cirriusimpact_yaml_documents($content, $log, $m->id);
 
             @yamls = ({ 'CirriusImpact' => 'yes' }) unless @yamls;
 
@@ -1087,24 +1275,10 @@ eval { $self->_ci_backfill_checkin_identifiers($data) };
 eval { $self->_ci_backfill_predue_identifiers($data) };
 eval { $self->_ci_backfill_additional_identifiers($data) };
 
-# --- Fill SMS text if still blank
-if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
-    my $brname = $data->{library}->{branchname} // $data->{sms}->{branchname} // '';
-    my $fname  = $data->{patron}->{firstname}   // $data->{sms}->{patronFirstName} // '';
-    my $phone  = $data->{library}->{branchphone}// $data->{sms}->{phone} // '';
-    my $title  = $data->{sms}->{title} // '';
-
-    my $fallback = sprintf(
-        '[%s] %s, You have item(s) that are now overdue: %s. Please return them to %s. Questions? Call %s.',
-        ($brname||'Your Library'),
-        ($fname||'Patron'),
-        ($title||''),
-        ($brname||'your library'),
-        ($phone||'')
-    );
-
-    $data->{sms}->{text} = $self->_ci_insert_title_into_text($fallback, $title);
-}
+# --- Fill SMS text if still blank (letter-aware fallback; ODUE wording only for overdue notices)
+$self->_ci_apply_transport_fallback_text(
+    $data, $data->{message_type}->{letter_code} // $m->letter_code, 'sms'
+);
 
         # ---- Merge additional keys from YAML 'sms' into $data->{sms}
         # We already handled text/reference/to/to_numbers above, so skip those
@@ -1258,6 +1432,9 @@ if (!defined $data->{sms}->{text} || $data->{sms}->{text} eq '') {
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
                     eval { $self->_ci_backfill_predue_identifiers($data) };
                     eval { $self->_ci_backfill_additional_identifiers($data) };
+                    $self->_ci_apply_transport_fallback_text(
+                        $data, $data->{message_type}->{letter_code} // $m->letter_code, 'phone'
+                    );
                 }
 
                 # ---- EMAIL (nested or flat)
