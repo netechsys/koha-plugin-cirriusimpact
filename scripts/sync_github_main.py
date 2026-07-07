@@ -19,6 +19,8 @@ from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 GITHUB_REPO = "netechsys/koha-plugin-cirriusimpact"
+GITHUB_AUTHOR_NAME = "Terry Rossio"
+GITHUB_AUTHOR_EMAIL = "18508581+netechsys@users.noreply.github.com"
 MAIN_PM = PLUGIN_ROOT / "Koha/Plugin/Com/CirriusImpact.pm"
 
 
@@ -43,8 +45,8 @@ def _plugin_version() -> str:
 
 def _squash_commit() -> str:
     env = os.environ.copy()
-    env.setdefault("GIT_AUTHOR_NAME", "Polaris User")
-    env.setdefault("GIT_AUTHOR_EMAIL", "polaris@polaris-alert.cirriusimpact.com")
+    env.setdefault("GIT_AUTHOR_NAME", GITHUB_AUTHOR_NAME)
+    env.setdefault("GIT_AUTHOR_EMAIL", GITHUB_AUTHOR_EMAIL)
     env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
     env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
     version = _plugin_version()
