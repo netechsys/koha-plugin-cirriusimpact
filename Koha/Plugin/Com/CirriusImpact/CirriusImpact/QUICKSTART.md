@@ -10,7 +10,7 @@ Download Latest Released version of Plugin from the GIT Repository.
 
 ### Step 1: Upload Plugin to Koha from the Administration Website.
 
-1. Download the latest `CirriusImpact-1.1.41.kpz` file from the [GitLab releases page](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
+1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` file from the [GitHub releases page](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
 3. Select the downloaded KPZ file (e.g., `CirriusImpact-1.1.41.kpz`)
 4. Click **Upload**

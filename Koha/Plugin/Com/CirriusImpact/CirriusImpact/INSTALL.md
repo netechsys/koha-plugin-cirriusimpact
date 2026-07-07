@@ -21,7 +21,7 @@ The CirriusImpact plugin integrates Koha's messaging system with CirriusImpact's
 
 ### 1. Install the Plugin
 
-1. Download the latest `CirriusImpact-1.1.41.kpz` file from the [GitLab releases page](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
+1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` file from the [GitHub releases page](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
 2. In Koha, go to: **Tools > Plugins > Upload Plugin**
 3. Upload the `.kpz` file
 4. The plugin will automatically install, including the SMS::Send drivers

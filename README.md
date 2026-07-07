@@ -2,16 +2,9 @@
 
 CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpact SMS/Voice service (shared with Koha / ByWater).
 
-**Canonical source (private Devel):** GitLab — https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact
+**Repository:** https://github.com/netechsys/koha-plugin-cirriusimpact
 
-**Public releases (production):** GitHub — https://github.com/netechsys/koha-plugin-cirriusimpact
-
-| Remote | Use |
-|---|---|
-| `origin` (GitLab) | Daily development, all commits on `main` |
-| `github` | Public `main` (docs, issue templates) + release **tags** (e.g. `v1.2.2`) + `.kpz` |
-
-## Support and troubleshooting (public)
+## Support and troubleshooting
 
 | Resource | Link |
 |---|---|

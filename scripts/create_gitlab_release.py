@@ -8,11 +8,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-GITLAB_URL = "https://smsgit2.cgsis.com"
-PROJECT = "tcr/koha-plugin-cirriusimpact"
-PROJECT_ID = 10
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 TOKEN = os.getenv("GITLAB_TOKEN") or os.getenv("GLPAT")
+GITLAB_URL = (os.getenv("GITLAB_URL") or "").rstrip("/")
+PROJECT = os.getenv("GITLAB_PROJECT", "tcr/koha-plugin-cirriusimpact")
+PROJECT_ID = int(os.getenv("GITLAB_PROJECT_ID", "10"))
 
 
 def _request(method: str, url: str, body: dict | None = None, headers: dict | None = None) -> tuple[int, str]:
@@ -54,6 +54,9 @@ def _upload_kpz(kpz_path: Path) -> str:
 def main() -> int:
     if not TOKEN:
         print("Error: set GITLAB_TOKEN", file=sys.stderr)
+        return 1
+    if not GITLAB_URL:
+        print("Error: set GITLAB_URL (private GitLab base URL)", file=sys.stderr)
         return 1
     version = sys.argv[1] if len(sys.argv) > 1 else ""
     if not version:

@@ -82,7 +82,7 @@ The plugin exports the following fields in CSV format (messageText is optional b
 
 ## Installation
 
-1. Download the latest `CirriusImpact-1.1.41.kpz` file from the [GitLab releases page](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
+1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` file from the [GitHub releases page](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
 2. In Koha, go to **Tools → Plugins → Upload Plugin**
 3. Upload the `.kpz` file
 4. The plugin automatically installs, including the SMS::Send drivers. **No manual SMS driver installation required!**
@@ -166,4 +166,4 @@ See [CHANGELOG.md](CHANGELOG.md) for detailed version history.
 
 ## Contributing
 
-This plugin is maintained by CI Management Services. For issues, feature requests, or contributions, please visit the [GitLab repository](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact).
+This plugin is maintained by CI Management Services. For issues, feature requests, or contributions, please visit the [GitHub repository](https://github.com/netechsys/koha-plugin-cirriusimpact).

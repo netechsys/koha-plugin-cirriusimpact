@@ -2,7 +2,7 @@
 
 **Document date:** June 17, 2026  
 **Plugin release:** CirriusImpact **v1.2.2**  
-**GitLab:** https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.2.2  
+**Releases:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases  
 **Integration:** SMS (`commType=T`) and voice (`commType=V`) via CSV export + SFTP; Koha status lifecycle (`pending` → `transmitted` → `sent` / `failed` / `pending`)
 
 ---
@@ -173,4 +173,4 @@ Please confirm:
 
 ---
 
-**Install package:** `koha-plugin-cirriusimpact-v1.2.2.kpz` from GitLab release v1.2.2
+**Install package:** `koha-plugin-cirriusimpact-v1.2.2.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
