@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Push main branch to public GitHub (community docs, issue templates, source mirror).
+"""Publish a squashed public snapshot to GitHub main (no co-author trailers).
 
-Does not replace tag-based release publish; use after updating CONTRIBUTING,
-.github templates, README, etc.
+GitHub is the public mirror. This script builds one clean commit from the
+current working tree using git commit-tree (avoids IDE-injected Co-authored-by
+trailers) and force-pushes main.
 
 Usage:
   python3 scripts/sync_github_main.py
@@ -18,6 +19,7 @@ from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 GITHUB_REPO = "netechsys/koha-plugin-cirriusimpact"
+MAIN_PM = PLUGIN_ROOT / "Koha/Plugin/Com/CirriusImpact.pm"
 
 
 def _load_token() -> str:
@@ -33,21 +35,53 @@ def _load_token() -> str:
     return ""
 
 
+def _plugin_version() -> str:
+    text = MAIN_PM.read_text()
+    m = re.search(r'our \$VERSION\s*=\s*"([^"]+)"', text)
+    return m.group(1) if m else "unknown"
+
+
+def _squash_commit() -> str:
+    env = os.environ.copy()
+    env.setdefault("GIT_AUTHOR_NAME", "Polaris User")
+    env.setdefault("GIT_AUTHOR_EMAIL", "polaris@polaris-alert.cirriusimpact.com")
+    env.setdefault("GIT_COMMITTER_NAME", env["GIT_AUTHOR_NAME"])
+    env.setdefault("GIT_COMMITTER_EMAIL", env["GIT_AUTHOR_EMAIL"])
+    version = _plugin_version()
+    message = (
+        f"CirriusImpact Koha plugin v{version}\n\n"
+        "Public snapshot of the CirriusImpact Koha plugin source and docs."
+    )
+    tree = subprocess.check_output(["git", "write-tree"], cwd=PLUGIN_ROOT, text=True, env=env).strip()
+    commit = subprocess.check_output(
+        ["git", "commit-tree", tree, "-m", message],
+        cwd=PLUGIN_ROOT,
+        text=True,
+        env=env,
+    ).strip()
+    if "Co-authored-by:" in subprocess.check_output(
+        ["git", "log", "-1", "--format=%B", commit], cwd=PLUGIN_ROOT, text=True
+    ):
+        raise RuntimeError("Squash commit unexpectedly contains Co-authored-by trailer")
+    return commit
+
+
 def main() -> int:
     token = _load_token()
     if not token:
         print("Error: GITHUB_TOKEN required", file=sys.stderr)
         return 1
+    commit = _squash_commit()
     push_url = (
         f"https://x-access-token:{urllib.parse.quote(token, safe='')}"
         f"@github.com/{GITHUB_REPO}.git"
     )
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    cmd = ["git", "push", push_url, "main:main", "--force"]
-    print("+ git push <github> main:main")
+    cmd = ["git", "push", push_url, f"{commit}:refs/heads/main", "--force"]
+    print("+ git push <github> <squash>:main --force")
     subprocess.run(cmd, cwd=PLUGIN_ROOT, check=True, env=env)
-    print(f"Synced main to https://github.com/{GITHUB_REPO}")
+    print(f"Published squashed main ({commit[:8]}) to https://github.com/{GITHUB_REPO}")
     return 0
 
 
