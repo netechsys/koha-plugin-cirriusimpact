@@ -98,7 +98,7 @@ sub new {
     return $self;
 }
 
-our $default_bootstrap_api_url = 'https://koha-bootstrap.cirriusimpact.com/v1/claim';
+our $default_bootstrap_api_url = 'https://configportal-devel.cgsis.com/koha-bootstrap/v1/claim';
 
 sub configure {
     my ($self, $args) = @_;

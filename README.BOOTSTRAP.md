@@ -48,7 +48,7 @@ Templates stay **CLI-only** (`install_message_templates.pl`).
 
 ## Claim UI (Configure)
 
-- Bootstrap API URL (default `https://koha-bootstrap.cirriusimpact.com/v1/claim`)
+- Bootstrap API URL (default `https://configportal-devel.cgsis.com/koha-bootstrap/v1/claim`)
 - Library ID + install token → **Claim / Re-claim**
 - On success: Connection + Features fields updated; `bootstrap_claimed_at` shown
 
