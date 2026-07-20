@@ -8,13 +8,18 @@
 
 ### Added
 
-- **`install_message_templates.pl`** installs CirriusImpact YAML notices for three Koha `letter.lang` values:
-  - `default` — English fallback
+- **`install_message_templates.pl`** installs CirriusImpact YAML notices for Koha `letter.lang` values:
+  - `default` — Koha Default tab (content from `--default-language`)
+  - `en` — English
   - `es-ES` — Spanish
   - `fr-CA` — French
-- CLI: `--languages=default,es-ES,fr-CA` and `--no-restart`
+- CLI:
+  - `--default-language=en|spa|fre` (aliases: `eng`, `es-ES`, `fr-CA`, …) fills `letter.lang=default`
+  - `--services=sms,phone` (aliases: `--transports`; `text`→sms, `voice`/`call`→phone) for SMS-only or phone-only installs
+  - `--languages=default,en,es-ES,fr-CA` and `--no-restart`
 - Upserts by `(module, code, message_transport_type, lang)` so languages do not overwrite each other
-- **`TEMPLATE_I18N.md`** — install notes, SMS GSM-7 vs UCS-2 guidance, language export mapping
+- **`TEMPLATE_I18N.md`**, **QUICKSTART.md**, **INSTALL.md** — installer variations and multilingual notes
+- KPZ build uses Info-ZIP-style STORED directory entries for broader Koha unpack compatibility
 
 ### SMS wording (GSM-7 safe)
 
@@ -39,6 +44,15 @@ Download `koha-plugin-cirriusimpact-v1.2.4.kpz` from this release, upload via **
 Re-run the template installer on each Koha instance:
 
 ```bash
+# Full install (SMS + phone, all languages, English Default tab)
 sudo koha-shell <instance> -c \
-  'perl .../CirriusImpact/install_message_templates.pl --languages=default,es-ES,fr-CA --no-restart'
+  'perl .../CirriusImpact/install_message_templates.pl --no-restart'
+
+# SMS only
+sudo koha-shell <instance> -c \
+  'perl .../CirriusImpact/install_message_templates.pl --services=sms --no-restart'
+
+# Spanish Default tab (still installs en / es-ES / fr-CA)
+sudo koha-shell <instance> -c \
+  'perl .../CirriusImpact/install_message_templates.pl --default-language=spa --no-restart'
 ```

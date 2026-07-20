@@ -55,9 +55,87 @@ Set the following system preferences in Koha:
    - **Skip ODUE phone if SMS/Email**: Check to suppress voice calls when SMS/Email exists
 5. Click **Save**
 
-### 4. Configure Notice Templates
+### 4. Install Message Templates (Recommended)
 
-For each notice template you want to send through CirriusImpact, add the YAML header:
+The plugin includes `install_message_templates.pl`, which installs CirriusImpact-ready notice templates into Koha's `letter` table. Run it as the Koha instance user:
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
+```
+
+#### What gets installed
+
+- **19 notice codes** × **2 transports** (SMS + phone) when both services are selected
+- **4 language rows** per template by default: `default`, `en`, `es-ES`, `fr-CA`
+- Koha's **Default** tab (`letter.lang=default`) is filled from `--default-language` (English by default)
+- SMS bodies use GSM-7-safe ASCII; see `TEMPLATE_I18N.md` for multilingual and character-budget notes
+
+#### Command-line options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--services=sms,phone` | Which transports to install (`sms` and/or `phone`) | both |
+| `--default-language=…` | Language content for Koha's Default tab | `en` |
+| `--languages=…` | Which `letter.lang` rows to write | `default,en,es-ES,fr-CA` |
+| `--no-restart` | Skip the interactive Koha restart prompt | off |
+
+`--transports` is accepted as an alias for `--services`.
+
+**Service aliases:** `text` → `sms`; `voice` / `call` → `phone`
+
+**Default-language aliases:** `en` / `eng`; `es-ES` / `spa`; `fr-CA` / `fre`
+
+#### Install examples
+
+**Full install** (SMS + phone, all languages, English Default tab):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --no-restart'
+```
+
+**SMS only** (library does not use voice):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=sms --no-restart'
+```
+
+**Phone/voice only:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=phone --no-restart'
+```
+
+**Spanish-primary library** (Default tab = Spanish; English tab still populated):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --default-language=spa --no-restart'
+```
+
+**SMS only, Spanish default, English + Spanish language rows only:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=sms --default-language=spa --languages=default,en,es-ES --no-restart'
+```
+
+#### Koha multilingual setup
+
+For translated notice tabs to appear in the staff interface:
+
+1. Set **TranslateNotices** = On
+2. Add `en`, `es-ES`, and/or `fr-CA` to **OPACLanguages** (install language packs as needed)
+3. Re-run the installer after changing languages or services
+
+Patron `borrowers.lang` selects the notice row; missing translations fall back to `default`. The plugin maps Koha language tags to Notification Processor codes (`eng`, `spa`, `fre`) in the CSV `language` column.
+
+### 5. Configure Notice Templates Manually (Alternative)
+
+If you prefer not to use the installer, create or edit notices in **Tools > Notices**. For each template sent through CirriusImpact, add the YAML header:
 
 ```yaml
 ---
@@ -84,7 +162,9 @@ sms:
 ---
 ```
 
-### 5. Set Up Message Queue Processing
+See `QUICKSTART.md` for additional cut-and-paste examples by notice type.
+
+### 6. Set Up Message Queue Processing
 
 The message queue should be processed regularly using the Koha cronjob:
 

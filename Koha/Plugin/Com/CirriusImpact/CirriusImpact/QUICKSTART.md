@@ -85,23 +85,69 @@ perl verify_installation.pl
 
 ### Step 5: Install Message Templates (Optional but Recommended)
 
-**🆕 NEW:** Install default message templates automatically from SSH shell:
+Install pre-configured CirriusImpact notice templates from SSH. Run as the Koha instance user:
 
 ```bash
-cd /var/lib/koha/library/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/
-sudo perl install_message_templates.pl
+sudo koha-shell INSTANCE -c \
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
 ```
 
-This will install 30+ pre-configured message templates for all supported message types including:
-- HOLD, HOLDDGST (Hold notifications)
-- CHECKOUT, CHECKIN (Circulation notifications)  
-- ODUE, ODUE2, ODUE3 (Overdue notifications)
-- PREDUE, PREDUEDGST (Pre-due notifications)
-- HOLD_CHANGED, HOLD_REMINDER (Hold management)
-- RENEWAL (Item renewal)
-- MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME (Membership)
+**Default behavior** (no extra flags):
+- **Services:** SMS and phone (`message_transport_type` = `sms` and `phone`)
+- **Languages:** `default`, `en`, `es-ES`, `fr-CA` (English, Spanish, French)
+- **Default tab:** Koha `letter.lang=default` is filled from English (`en`)
 
-All templates include proper CirriusImpact YAML markers and are ready to use!
+Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more. All include CirriusImpact YAML markers and GSM-7-safe SMS text.
+
+#### Common install variations
+
+**SMS only** (no phone/voice templates):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=sms --no-restart'
+```
+
+**Phone/voice only:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=phone --no-restart'
+```
+
+**Spanish-primary library** (Default tab = Spanish; still installs `en`, `es-ES`, `fr-CA`):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --default-language=spa --no-restart'
+```
+
+**SMS only, Spanish default:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --services=sms --default-language=spa --no-restart'
+```
+
+**Limit languages** (example: English and Spanish only):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --languages=default,en,es-ES --no-restart'
+```
+
+#### Options reference
+
+| Option | Values | Default |
+|--------|--------|---------|
+| `--services` | `sms`, `phone` (comma-separated) | `sms,phone` |
+| `--default-language` | `en`/`eng`, `es-ES`/`spa`, `fr-CA`/`fre` | `en` |
+| `--languages` | `default`, `en`, `es-ES`, `fr-CA` (comma-separated) | all four |
+| `--no-restart` | skip interactive Koha restart prompt | off |
+
+Aliases: `--transports` = `--services`; `text`→sms; `voice`/`call`→phone.
+
+For multilingual notices, enable **TranslateNotices** and add `en` / `es-ES` / `fr-CA` to **OPACLanguages**. See `TEMPLATE_I18N.md` for language and SMS character details.
 
 ### Step 6: Configure Notice Templates (If Not Using Auto-Install)
 

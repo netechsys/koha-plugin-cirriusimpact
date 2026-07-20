@@ -7,29 +7,83 @@ use Getopt::Long;
 
 # CirriusImpact Message Template Installer (multilingual)
 # Installs CirriusImpact YAML notices for:
-#   default  = English fallback (Koha "Default" tab)
-#   es-ES    = Spanish (GSM-7-safe ASCII for SMS bodies)
-#   fr-CA    = French  (GSM-7-safe ASCII for SMS bodies)
+#   default  = Koha "Default" tab (content from --default-language)
+#   en       = English  (GSM-7-safe ASCII for SMS bodies)
+#   es-ES    = Spanish  (GSM-7-safe ASCII for SMS bodies)
+#   fr-CA    = French   (GSM-7-safe ASCII for SMS bodies)
 #
 # SMS wording avoids accents so carriers stay on GSM-7 (~160 chars/segment)
 # instead of UCS-2 (~70 chars/segment). Titles still expand at send time.
 #
 # Usage:
 #   perl install_message_templates.pl
-#   perl install_message_templates.pl --languages=default,es-ES,fr-CA
+#   perl install_message_templates.pl --default-language=spa
+#   perl install_message_templates.pl --services=sms
+#   perl install_message_templates.pl --services=phone --default-language=es-ES
+#   perl install_message_templates.pl --services=sms,phone --languages=default,en,es-ES,fr-CA
 #   perl install_message_templates.pl --languages=es-ES --no-restart
 
 print "CirriusImpact Message Template Installer (multilingual)\n";
 print "========================================================\n\n";
 
-my @want_langs = ('default', 'es-ES', 'fr-CA');
+my @want_langs = ('default', 'en', 'es-ES', 'fr-CA');
+my @want_services = ('sms', 'phone');  # Koha message_transport_type
 my $no_restart = 0;
+my $default_language_opt = 'en';
+my $services_opt;
 GetOptions(
-    'languages=s' => \my $lang_opt,
-    'no-restart'  => \$no_restart,
-) or die "Usage: $0 [--languages=default,es-ES,fr-CA] [--no-restart]\n";
+    'languages=s'         => \my $lang_opt,
+    'default-language=s'  => \$default_language_opt,
+    'services=s'          => \$services_opt,
+    'transports=s'        => \$services_opt,  # alias
+    'no-restart'          => \$no_restart,
+) or die "Usage: $0 [--default-language=en|es-ES|fr-CA|eng|spa|fre] [--services=sms,phone] [--languages=default,en,es-ES,fr-CA] [--no-restart]\n";
+
+# Map checklist / IETF aliases to content keys (en, es-ES, fr-CA)
+my %default_lang_aliases = (
+    default => 'en',
+    en      => 'en',
+    eng     => 'en',
+    english => 'en',
+    'es-ES' => 'es-ES',
+    es      => 'es-ES',
+    spa     => 'es-ES',
+    spanish => 'es-ES',
+    'fr-CA' => 'fr-CA',
+    fr      => 'fr-CA',
+    fre     => 'fr-CA',
+    french  => 'fr-CA',
+);
+my $default_content_key = $default_lang_aliases{$default_language_opt};
+unless (defined $default_content_key) {
+    die "Unknown --default-language='$default_language_opt' (use en|es-ES|fr-CA or eng|spa|fre)\n";
+}
+
 if (defined $lang_opt && $lang_opt =~ /\S/) {
     @want_langs = map { s/^\s+|\s+$//gr } split /,/, $lang_opt;
+}
+
+# --services / --transports: sms and/or phone (voice -> phone)
+my %service_aliases = (
+    sms   => 'sms',
+    text  => 'sms',
+    phone => 'phone',
+    voice => 'phone',
+    call  => 'phone',
+);
+if (defined $services_opt && $services_opt =~ /\S/) {
+    my @raw = map { lc(s/^\s+|\s+$//gr) } split /,/, $services_opt;
+    my @resolved;
+    my %seen;
+    for my $s (@raw) {
+        my $t = $service_aliases{$s};
+        die "Unknown --services entry '$s' (use sms and/or phone; aliases: text, voice, call)\n"
+            unless defined $t;
+        next if $seen{$t}++;
+        push @resolved, $t;
+    }
+    die "--services must include at least one of: sms, phone\n" unless @resolved;
+    @want_services = @resolved;
 }
 
 # Try to use Koha modules first, fall back to direct connection
@@ -86,16 +140,19 @@ unless ($koha_available) {
     }
 }
 
+print "Default letter.lang content: $default_content_key (--default-language=$default_language_opt)\n";
+print "Services to install: " . join(', ', @want_services) . "\n";
 print "Languages to install: " . join(', ', @want_langs) . "\n\n";
 
-# Each template: module/code/transport + content hash keyed by Koha letter.lang
+# Each template: module/code/transport + content hash keyed by en|es-ES|fr-CA
+# (letter.lang=default is filled from --default-language at install time)
 my %templates = (
     'HOLD_SMS' => {
         module => 'reserves',
         code => 'HOLD',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -129,7 +186,7 @@ sms:
         code => 'HOLD',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -163,7 +220,7 @@ call:
         code => 'HOLDDGST',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -194,7 +251,7 @@ sms:
         code => 'HOLDDGST',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -225,7 +282,7 @@ call:
         code => 'CHECKOUT',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -256,7 +313,7 @@ sms:
         code => 'CHECKOUT',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -287,7 +344,7 @@ call:
         code => 'CHECKIN',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -318,7 +375,7 @@ sms:
         code => 'CHECKIN',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -349,7 +406,7 @@ call:
         code => 'ODUE',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -380,7 +437,7 @@ sms:
         code => 'ODUE',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -411,7 +468,7 @@ call:
         code => 'ODUE2',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -442,7 +499,7 @@ sms:
         code => 'ODUE2',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -473,7 +530,7 @@ call:
         code => 'ODUE3',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -504,7 +561,7 @@ sms:
         code => 'ODUE3',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -535,7 +592,7 @@ call:
         code => 'PREDUE',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -566,7 +623,7 @@ sms:
         code => 'PREDUE',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -597,7 +654,7 @@ call:
         code => 'PREDUEDGST',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -628,7 +685,7 @@ sms:
         code => 'PREDUEDGST',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -659,7 +716,7 @@ call:
         code => 'HOLD_CHANGED',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -690,7 +747,7 @@ sms:
         code => 'HOLD_CHANGED',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -721,7 +778,7 @@ call:
         code => 'HOLD_REMINDER',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -752,7 +809,7 @@ sms:
         code => 'HOLD_REMINDER',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -783,7 +840,7 @@ call:
         code => 'HOLDPLACED',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -814,7 +871,7 @@ sms:
         code => 'HOLDPLACED',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -845,7 +902,7 @@ call:
         code => 'HOLDPLACED_PATRON',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -876,7 +933,7 @@ sms:
         code => 'HOLDPLACED_PATRON',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -907,7 +964,7 @@ call:
         code => 'HOLD_SLIP',
         transport => 'email',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -941,7 +998,7 @@ email:
         code => 'RENEWAL',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -972,7 +1029,7 @@ sms:
         code => 'RENEWAL',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1003,7 +1060,7 @@ call:
         code => 'AUTO_RENEWALS',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1034,7 +1091,7 @@ sms:
         code => 'AUTO_RENEWALS',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1065,7 +1122,7 @@ call:
         code => 'AUTO_RENEWALS_DGST',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1096,7 +1153,7 @@ sms:
         code => 'AUTO_RENEWALS_DGST',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1127,7 +1184,7 @@ call:
         code => 'MEMBERSHIP_EXPIRY',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1158,7 +1215,7 @@ sms:
         code => 'MEMBERSHIP_EXPIRY',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1189,7 +1246,7 @@ call:
         code => 'MEMBERSHIP_RENEWED',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1220,7 +1277,7 @@ sms:
         code => 'MEMBERSHIP_RENEWED',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1251,7 +1308,7 @@ call:
         code => 'WELCOME',
         transport => 'sms',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1282,7 +1339,7 @@ sms:
         code => 'WELCOME',
         transport => 'phone',
         content => {
-        'default' => q{
+        'en' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
@@ -1310,15 +1367,23 @@ call:
     },
 );
 
+sub content_for_lang {
+    my ($template, $lang) = @_;
+    # Koha Default tab uses letter.lang=default; fill from --default-language.
+    my $key = ($lang eq 'default') ? $default_content_key : $lang;
+    return $template->{content}{$key};
+}
+
 sub install_template {
     my ($name, $template, $lang) = @_;
-    my $content = $template->{content}{$lang};
+    my $content = content_for_lang($template, $lang);
     unless (defined $content && $content =~ /\S/) {
         print "Skipping $name ($lang) — no content\n";
         return 0;
     }
 
-    print "Installing $name [$lang]... ";
+    my $src = ($lang eq 'default') ? "default<-$default_content_key" : $lang;
+    print "Installing $name [$src]... ";
 
     my $check_sth = $dbh->prepare(q{
         SELECT COUNT(*) FROM letter
@@ -1361,20 +1426,28 @@ sub install_template {
 }
 
 print "Installing message templates...\n\n";
+my %want_service = map { $_ => 1 } @want_services;
 my $count = 0;
 for my $lang (@want_langs) {
     print "---- Language: $lang ----\n";
     for my $name (sort keys %templates) {
-        $count += install_template($name, $templates{$name}, $lang);
+        my $tpl = $templates{$name};
+        unless ($want_service{ $tpl->{transport} }) {
+            next;
+        }
+        $count += install_template($name, $tpl, $lang);
     }
     print "\n";
 }
 
 print "=" x 50, "\n";
 print "Installation complete!\n";
-print "Installed/Updated $count template rows across languages: @want_langs\n\n";
+print "Installed/Updated $count template rows\n";
+print "  services:  @want_services\n";
+print "  languages: @want_langs\n\n";
 print "Notes:\n";
-print "- Enable TranslateNotices and add es-ES / fr-CA under OPACLanguages for tabs to appear.\n";
+print "- letter.lang=default content came from $default_content_key.\n";
+print "- Enable TranslateNotices; add en / es-ES / fr-CA under OPACLanguages for language tabs.\n";
 print "- SMS text is GSM-7-safe (ASCII) so segments stay ~160 chars; accents would drop to ~70.\n";
 print "- Koha picks letter.lang from the patron language; CirriusImpact CSV language maps to eng/spa/fre.\n\n";
 

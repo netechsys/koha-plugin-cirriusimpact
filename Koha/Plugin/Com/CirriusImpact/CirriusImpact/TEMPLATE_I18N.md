@@ -4,18 +4,39 @@
 
 | Koha `letter.lang` | Meaning | CirriusImpact CSV `language` |
 |--------------------|---------|------------------------------|
-| `default` | English fallback | `eng` |
+| `default` | Koha Default tab (content from `--default-language`) | maps from source lang |
+| `en` | English | `eng` |
 | `es-ES` | Spanish | `spa` |
 | `fr-CA` | French (Canadian tag) | `fre` |
 
-Install:
+Install (all four rows by default; Default tab filled from English):
 
 ```bash
 sudo koha-shell <instance> -c \
-  'perl /path/to/CirriusImpact/install_message_templates.pl --languages=default,es-ES,fr-CA --no-restart'
+  'perl /path/to/CirriusImpact/install_message_templates.pl --no-restart'
 ```
 
-Requires **TranslateNotices** = On. Add `es-ES` / `fr-CA` to **OPACLanguages** (and install language packs) so patrons can select those languages.
+Spanish-primary library (Default tab = Spanish; still installs `en`, `es-ES`, `fr-CA`):
+
+```bash
+sudo koha-shell <instance> -c \
+  'perl /path/to/CirriusImpact/install_message_templates.pl --default-language=spa --no-restart'
+```
+
+SMS only (skip phone/voice templates):
+
+```bash
+sudo koha-shell <instance> -c \
+  'perl /path/to/CirriusImpact/install_message_templates.pl --services=sms --no-restart'
+```
+
+Aliases for `--default-language`: `en`/`eng`, `es-ES`/`spa`, `fr-CA`/`fre`.
+
+Optional: `--services=sms`, `--services=phone`, or `--services=sms,phone` (default both). Aliases: `text`→sms, `voice`/`call`→phone. `--transports` is accepted as an alias for `--services`.
+
+Optional: `--languages=default,en,es-ES,fr-CA` to limit which `letter.lang` rows are written.
+
+Requires **TranslateNotices** = On. Add `en` / `es-ES` / `fr-CA` to **OPACLanguages** (and install language packs) so patrons can select those languages and notice tabs appear.
 
 ## SMS character budget (70 vs 160)
 
