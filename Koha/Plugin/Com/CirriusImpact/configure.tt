@@ -73,6 +73,7 @@
       <p class="hint">
         Only notices for patrons whose <strong>home library</strong> is checked are exported to CirriusImpact.
         Leave all checked (default) to include every branch. Uncheck libraries that are not on this service.
+        On Save, the selection is also sent to the Configuration Portal (requires a successful Claim first).
       </p>
       [% IF libraries.size %]
         <div class="branch-enable-list" style="max-height: 16em; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em 1em;">
@@ -98,14 +99,6 @@
       </div>
       <div class="checkbox">
         <label><input type="checkbox" name="enable_sms" value="1" [% IF enable_sms %]checked="checked"[% END %]> Enable SMS</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_email" value="1" [% IF enable_email %]checked="checked"[% END %]> Enable Email</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_whatsapp" value="1" [% IF enable_whatsapp %]checked="checked"[% END %]> Enable WhatsApp</label>
-      </div>
-      <div class="checkbox">
       </div>
 
       <div class="checkbox">

@@ -116,6 +116,7 @@ sub configure {
         }
     }
     elsif ( $cgi->param('save') ) {
+        my $enabled_branches = $self->_ci_enabled_branches_from_cgi($cgi);
         $self->store_data({
             host                               => scalar $cgi->param('host'),
             username                           => scalar $cgi->param('username'),
@@ -124,18 +125,42 @@ sub configure {
             skip_odue_if_other_if_sms_or_email => scalar $cgi->param('skip_odue_if_other_if_sms_or_email'),
             enable_phone                       => scalar $cgi->param('enable_phone'),
             enable_sms                         => scalar $cgi->param('enable_sms'),
-            enable_email                       => scalar $cgi->param('enable_email'),
-            enable_whatsapp                    => scalar $cgi->param('enable_whatsapp'),
+            enable_email                       => 0,
+            enable_whatsapp                    => 0,
             include_messagetext                => scalar $cgi->param('include_messagetext'),
             production_data                    => scalar $cgi,
             section_order                      => scalar $cgi->param('section_order') || 'message_type,patron,items,call,sms,message',
-            enabled_branches                   => $self->_ci_enabled_branches_from_cgi($cgi),
+            enabled_branches                   => $enabled_branches,
             bootstrap_api_url                  => scalar $cgi->param('bootstrap_api_url')
               || $self->retrieve_data('bootstrap_api_url')
               || $default_bootstrap_api_url,
             bootstrap_library_id               => scalar $cgi->param('bootstrap_library_id')
               || $self->retrieve_data('bootstrap_library_id'),
         });
+        my ( $sync_ok, $sync_msg ) = $self->_ci_sync_branches_to_portal($enabled_branches);
+        unless ($sync_ok) {
+            my $template = $self->get_template({ file => 'configure.tt' });
+            $template->param(
+                host                               => $self->retrieve_data('host'),
+                username                           => $self->retrieve_data('username'),
+                password                           => $self->retrieve_data('password'),
+                archive_dir                        => $self->retrieve_data('archive_dir') || $default_archive_dir,
+                skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
+                enable_phone                       => $self->retrieve_data('enable_phone'),
+                enable_sms                         => $self->retrieve_data('enable_sms'),
+                include_messagetext                => $self->retrieve_data('include_messagetext'),
+                production_data                    => $self,
+                section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
+                libraries                          => $self->_ci_libraries_for_configure,
+                bootstrap_api_url                  => $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url,
+                bootstrap_library_id               => $self->retrieve_data('bootstrap_library_id'),
+                bootstrap_claimed_at               => $self->retrieve_data('bootstrap_claimed_at'),
+                claim_message                      => 'Settings saved on this Koha server.',
+                claim_error                        => $sync_msg,
+            );
+            $self->output_html($template->output());
+            return;
+        }
         $self->go_home();
         return;
     }
@@ -149,8 +174,6 @@ sub configure {
         skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
         enable_phone                       => $self->retrieve_data('enable_phone'),
         enable_sms                         => $self->retrieve_data('enable_sms'),
-        enable_email                       => $self->retrieve_data('enable_email'),
-        enable_whatsapp                    => $self->retrieve_data('enable_whatsapp'),
         include_messagetext                => $self->retrieve_data('include_messagetext'),
         production_data                    => $self,
         section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
@@ -233,21 +256,75 @@ sub _ci_claim_bootstrap {
       unless length($host) && length($user);
 
     my $now = POSIX::strftime( '%Y-%m-%d %H:%M:%S', gmtime() );
-    $self->store_data({
+    my %to_store = (
         host                 => $host,
         username             => $user,
         password             => defined $data->{password} ? $data->{password} : '',
         enable_sms           => $data->{enable_sms}           ? 1 : 0,
         enable_phone         => $data->{enable_phone}         ? 1 : 0,
-        enable_email         => $data->{enable_email}         ? 1 : 0,
-        enable_whatsapp      => $data->{enable_whatsapp}      ? 1 : 0,
+        enable_email         => 0,
+        enable_whatsapp      => 0,
         include_messagetext  => $data->{include_messagetext}  ? 1 : 0,
         bootstrap_api_url    => $api_url,
         bootstrap_library_id => $data->{library_id} || $library_id,
         bootstrap_claimed_at => $now,
-    });
+    );
+    if ( defined $data->{sync_token} && length $data->{sync_token} ) {
+        $to_store{bootstrap_sync_token} = $data->{sync_token};
+    }
+    if ( exists $data->{enabled_branches} ) {
+        $to_store{enabled_branches} = $data->{enabled_branches} // '*';
+    }
+    $self->store_data( \%to_store );
 
     return ( 1, "Claim successful for library '" . ( $data->{library_id} || $library_id ) . "'. Connection and features updated." );
+}
+
+# Push enabled_branches to Configuration Portal via claim service sync endpoint.
+sub _ci_sync_branches_to_portal {
+    my ( $self, $enabled_branches ) = @_;
+
+    my $library_id = $self->retrieve_data('bootstrap_library_id') // '';
+    my $sync_token = $self->retrieve_data('bootstrap_sync_token') // '';
+    my $api_url    = $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url;
+
+    unless ( length $library_id && length $sync_token ) {
+        return (
+            0,
+            'Branch choices were saved here, but not sent to the Configuration Portal '
+              . '(claim/re-claim first to obtain a sync token).'
+        );
+    }
+
+    my $sync_url = $api_url;
+    $sync_url =~ s{/*\z}{};
+    if ( $sync_url =~ m{/v1/claim\z} ) {
+        $sync_url =~ s{/v1/claim\z}{/v1/sync-branches};
+    }
+    else {
+        $sync_url .= '/v1/sync-branches';
+    }
+
+    my $payload = encode_json({
+        library_id        => $library_id,
+        sync_token        => $sync_token,
+        enabled_branches  => defined $enabled_branches ? $enabled_branches : '',
+    });
+
+    my ( $code, $body, $err ) = $self->_ci_http_post_json( $sync_url, $payload );
+    if ($err) {
+        return ( 0, "Portal branch sync failed: $err" );
+    }
+    if ( !defined $code || $code < 200 || $code >= 300 ) {
+        my $detail = '';
+        try {
+            my $j = decode_json( $body // '{}' );
+            $detail = $j->{error} if ref($j) eq 'HASH' && $j->{error};
+        } catch { };
+        return ( 0, "Portal branch sync failed (HTTP " . ( $code // '?' ) . ")"
+          . ( $detail ? ": $detail" : '' ) );
+    }
+    return ( 1, 'Branch choices synced to Configuration Portal.' );
 }
 
 sub _ci_http_post_json {

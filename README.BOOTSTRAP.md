@@ -68,3 +68,11 @@ See `../Portal/koha_bootstrap.env.example` and `../KohaBootstrap/README.md`.
 - Per-branch FTP/keyword (still one claim / one SFTP per Koha instance)
 - Filtering by hold pickup / owning branch (home library only for now)
 - Production DNS/TLS cutover for the claim hostname
+
+## Branch sync to Configuration Portal
+
+On **Save**, enabled branch codes are POSTed to the claim service
+`/v1/sync-branches` (using a sync token issued at claim time), which stores
+`KOHA_ENABLED_BRANCHES` in ConfigurationDB via the Portal internal API.
+
+Re-claim if Save reports that no sync token is present.
