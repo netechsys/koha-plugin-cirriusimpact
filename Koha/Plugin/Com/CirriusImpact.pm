@@ -16,6 +16,7 @@ BEGIN {
 use Modern::Perl;
 use Koha::Database;
 use Koha::Patrons;
+use Koha::Libraries;
 
 use Koha::Biblios;
 use Koha::Items;
@@ -48,14 +49,14 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.2.4";
+our $VERSION = "1.3.0-dev";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-06-09',
+    date_updated    => '2026-07-20',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -97,28 +98,24 @@ sub new {
     return $self;
 }
 
+our $default_bootstrap_api_url = 'https://koha-bootstrap.cirriusimpact.com/v1/claim';
+
 sub configure {
     my ($self, $args) = @_;
     my $cgi = $self->{'cgi'};
 
-    unless ($cgi->param('save')) {
-        my $template = $self->get_template({ file => 'configure.tt' });
-        $template->param(
-            host                               => $self->retrieve_data('host'),
-            username                           => $self->retrieve_data('username'),
-            password                           => $self->retrieve_data('password'),
-            archive_dir                        => $self->retrieve_data('archive_dir') || $default_archive_dir,
-            skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
-            enable_phone                       => $self->retrieve_data('enable_phone'),
-            enable_sms                         => $self->retrieve_data('enable_sms'),
-            enable_email                       => $self->retrieve_data('enable_email'),
-            enable_whatsapp                    => $self->retrieve_data('enable_whatsapp'),
-            include_messagetext                => $self->retrieve_data('include_messagetext'),
-            production_data                    => $self,
-            section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
-        );
-        $self->output_html($template->output());
-    } else {
+    my $claim_message;
+    my $claim_error;
+
+    if ( $cgi->param('claim') ) {
+        my ( $ok, $msg ) = $self->_ci_claim_bootstrap($cgi);
+        if ($ok) {
+            $claim_message = $msg;
+        } else {
+            $claim_error = $msg;
+        }
+    }
+    elsif ( $cgi->param('save') ) {
         $self->store_data({
             host                               => scalar $cgi->param('host'),
             username                           => scalar $cgi->param('username'),
@@ -132,9 +129,232 @@ sub configure {
             include_messagetext                => scalar $cgi->param('include_messagetext'),
             production_data                    => scalar $cgi,
             section_order                      => scalar $cgi->param('section_order') || 'message_type,patron,items,call,sms,message',
+            enabled_branches                   => $self->_ci_enabled_branches_from_cgi($cgi),
+            bootstrap_api_url                  => scalar $cgi->param('bootstrap_api_url')
+              || $self->retrieve_data('bootstrap_api_url')
+              || $default_bootstrap_api_url,
+            bootstrap_library_id               => scalar $cgi->param('bootstrap_library_id')
+              || $self->retrieve_data('bootstrap_library_id'),
         });
         $self->go_home();
+        return;
     }
+
+    my $template = $self->get_template({ file => 'configure.tt' });
+    $template->param(
+        host                               => $self->retrieve_data('host'),
+        username                           => $self->retrieve_data('username'),
+        password                           => $self->retrieve_data('password'),
+        archive_dir                        => $self->retrieve_data('archive_dir') || $default_archive_dir,
+        skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
+        enable_phone                       => $self->retrieve_data('enable_phone'),
+        enable_sms                         => $self->retrieve_data('enable_sms'),
+        enable_email                       => $self->retrieve_data('enable_email'),
+        enable_whatsapp                    => $self->retrieve_data('enable_whatsapp'),
+        include_messagetext                => $self->retrieve_data('include_messagetext'),
+        production_data                    => $self,
+        section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
+        libraries                          => $self->_ci_libraries_for_configure,
+        bootstrap_api_url                  => $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url,
+        bootstrap_library_id               => $self->retrieve_data('bootstrap_library_id'),
+        bootstrap_claimed_at               => $self->retrieve_data('bootstrap_claimed_at'),
+        claim_message                      => $claim_message,
+        claim_error                        => $claim_error,
+    );
+    $self->output_html($template->output());
+}
+
+# POST library_id + token to public bootstrap claim API; apply SFTP + features.
+sub _ci_claim_bootstrap {
+    my ( $self, $cgi ) = @_;
+
+    my $api_url = scalar $cgi->param('bootstrap_api_url');
+    $api_url = $api_url || $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url;
+    $api_url =~ s/^\s+|\s+$//g;
+
+    my $library_id = scalar $cgi->param('bootstrap_library_id');
+    $library_id = $library_id // '';
+    $library_id =~ s/^\s+|\s+$//g;
+
+    my $token = scalar $cgi->param('bootstrap_token');
+    $token = $token // '';
+    $token =~ s/^\s+|\s+$//g;
+
+    return ( 0, 'Bootstrap API URL is required.' ) unless length $api_url;
+    return ( 0, 'Library ID is required.' )         unless length $library_id;
+    return ( 0, 'Install token is required.' )      unless length $token;
+
+    # Persist URL + library id even if claim fails (operator convenience)
+    $self->store_data({
+        bootstrap_api_url    => $api_url,
+        bootstrap_library_id => $library_id,
+    });
+
+    my $payload = encode_json({
+        library_id => $library_id,
+        token      => $token,
+    });
+
+    my ( $code, $body, $err ) = $self->_ci_http_post_json( $api_url, $payload );
+    if ($err) {
+        return ( 0, "Claim request failed: $err" );
+    }
+    if ( !defined $code || $code !~ /^\d+$/ ) {
+        return ( 0, 'Claim request failed: no HTTP status' );
+    }
+    if ( $code == 401 ) {
+        return ( 0, 'Invalid or expired install token.' );
+    }
+    if ( $code == 429 ) {
+        return ( 0, 'Too many claim attempts; try again later.' );
+    }
+    if ( $code < 200 || $code >= 300 ) {
+        my $detail = '';
+        try {
+            my $j = decode_json( $body // '{}' );
+            $detail = $j->{error} if ref($j) eq 'HASH' && $j->{error};
+        } catch { };
+        return ( 0, "Claim failed (HTTP $code)" . ( $detail ? ": $detail" : '' ) );
+    }
+
+    my $data;
+    my $json_err;
+    try {
+        $data = decode_json( $body // '{}' );
+    } catch {
+        $json_err = $_;
+    };
+    return ( 0, 'Claim response was not valid JSON.' )
+      if $json_err || ref($data) ne 'HASH';
+
+    my $host = $data->{host} // '';
+    my $user = $data->{username} // '';
+    return ( 0, 'Claim response missing host or username.' )
+      unless length($host) && length($user);
+
+    my $now = POSIX::strftime( '%Y-%m-%d %H:%M:%S', gmtime() );
+    $self->store_data({
+        host                 => $host,
+        username             => $user,
+        password             => defined $data->{password} ? $data->{password} : '',
+        enable_sms           => $data->{enable_sms}           ? 1 : 0,
+        enable_phone         => $data->{enable_phone}         ? 1 : 0,
+        enable_email         => $data->{enable_email}         ? 1 : 0,
+        enable_whatsapp      => $data->{enable_whatsapp}      ? 1 : 0,
+        include_messagetext  => $data->{include_messagetext}  ? 1 : 0,
+        bootstrap_api_url    => $api_url,
+        bootstrap_library_id => $data->{library_id} || $library_id,
+        bootstrap_claimed_at => $now,
+    });
+
+    return ( 1, "Claim successful for library '" . ( $data->{library_id} || $library_id ) . "'. Connection and features updated." );
+}
+
+sub _ci_http_post_json {
+    my ( $self, $url, $json_body ) = @_;
+
+    try {
+        require HTTP::Tiny;
+        my $http = HTTP::Tiny->new(
+            timeout         => 30,
+            verify_SSL      => 1,
+            default_headers => {
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+            },
+        );
+        my $res = $http->request(
+            'POST', $url,
+            { content => $json_body }
+        );
+        return ( $res->{status}, $res->{content}, undef );
+    } catch {
+        my $http_tiny_err = $_;
+        try {
+            require LWP::UserAgent;
+            require HTTP::Request;
+            my $ua = LWP::UserAgent->new( timeout => 30, agent => 'CirriusImpact-Koha-Plugin/1.3' );
+            my $req = HTTP::Request->new( POST => $url );
+            $req->header( 'Content-Type' => 'application/json' );
+            $req->header( 'Accept'       => 'application/json' );
+            $req->content($json_body);
+            my $res = $ua->request($req);
+            return ( $res->code, $res->decoded_content, undef );
+        } catch {
+            return ( undef, undef, "HTTP client unavailable ($http_tiny_err / $_)" );
+        };
+    };
+}
+
+# List Koha libraries for Configure checkboxes (branchcode, branchname, enabled).
+# Missing / "*" enabled_branches = all checked (no filter). Empty string = none checked.
+sub _ci_libraries_for_configure {
+    my ($self) = @_;
+    my $raw = $self->retrieve_data('enabled_branches');
+    my $all_mode = !defined $raw || $raw eq '*';
+    my %selected;
+    if ( !$all_mode && defined $raw && $raw ne '' ) {
+        %selected = map { $_ => 1 } grep { length } split /\s*,\s*/, $raw;
+    }
+
+    my @libraries;
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchname'] } );
+        while ( my $lib = $rs->next ) {
+            my $code = $lib->branchcode // next;
+            push @libraries, {
+                branchcode => $code,
+                branchname => $lib->branchname // $code,
+                enabled    => $all_mode ? 1 : ( $selected{$code} ? 1 : 0 ),
+            };
+        }
+    } catch {
+        warn "CirriusImpact: failed to load libraries for configure: $_\n";
+    };
+    return \@libraries;
+}
+
+# Persist Configure branch selection.
+# "*" = all branches (no filter; new libraries included automatically).
+# ""  = no branches enabled (export nothing).
+# "A,B" = only those branchcodes.
+sub _ci_enabled_branches_from_cgi {
+    my ( $self, $cgi ) = @_;
+    my @selected = $cgi->can('multi_param')
+        ? $cgi->multi_param('enabled_branches')
+        : $cgi->param('enabled_branches');
+    @selected = grep { defined && length } @selected;
+
+    my @all_codes;
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchcode'] } );
+        while ( my $lib = $rs->next ) {
+            push @all_codes, $lib->branchcode if $lib->branchcode;
+        }
+    } catch { };
+
+    return '' unless @selected;
+    return '*' if @all_codes && @selected == @all_codes;
+
+    my %want = map { $_ => 1 } @selected;
+    if (@all_codes) {
+        my $missing = grep { !$want{$_} } @all_codes;
+        return '*' unless $missing;
+    }
+    return join( ',', @selected );
+}
+
+# Patron home branch filter for before_send_messages / CSV (matches CSV branch field).
+# Never configured or "*" => allow all. Empty => allow none.
+sub _ci_branch_enabled {
+    my ( $self, $branchcode ) = @_;
+    my $raw = $self->retrieve_data('enabled_branches');
+    return 1 unless defined $raw;
+    return 1 if $raw eq '*';
+    return 0 if $raw eq '';
+    return 0 unless defined $branchcode && length $branchcode;
+    my %set = map { $_ => 1 } grep { length } split /\s*,\s*/, $raw;
+    return $set{$branchcode} ? 1 : 0;
 }
 
 sub install {
@@ -1151,9 +1371,31 @@ sub before_send_messages {
         $log->info("FOUND " . scalar @messages . " MESSAGES TO PROCESS");
         last unless @messages;
 
-        unless ($test_mode) { $_->update({ status => 'deleted' }) for @messages; }
-
+        # Leave notices for disabled branches as pending (do not claim/delete).
+        # Filter uses patron home branchcode — same value exported in CSV branch.
+        my @to_process;
         for my $m (@messages) {
+            my $branchcode = '';
+            try {
+                my $patron = Koha::Patrons->find( $m->borrowernumber );
+                $branchcode = $patron->branchcode // '' if $patron;
+            } catch { };
+            if ( $self->_ci_branch_enabled($branchcode) ) {
+                push @to_process, $m;
+            } else {
+                $log->info(
+                    "Leaving message "
+                      . $m->id
+                      . " pending — home branch '$branchcode' not enabled for CirriusImpact"
+                );
+            }
+        }
+        last unless @to_process;
+        $log->info( "PROCESSING " . scalar(@to_process) . " MESSAGES AFTER BRANCH FILTER" );
+
+        unless ($test_mode) { $_->update({ status => 'deleted' }) for @to_process; }
+
+        for my $m (@to_process) {
             $log->info("WORKING ON MESSAGE " . $m->id);
             my $content = $m->content // '';
 

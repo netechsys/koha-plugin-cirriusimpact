@@ -10,10 +10,55 @@
 </div>
 
 <div class="main container">
+  [% IF claim_message %]
+  <div class="alert alert-success" style="margin: 1em 0; padding: 0.75em 1em; background: #d4edda; border: 1px solid #c3e6cb; color: #155724;">
+    [% claim_message | html %]
+  </div>
+  [% END %]
+  [% IF claim_error %]
+  <div class="alert alert-error" style="margin: 1em 0; padding: 0.75em 1em; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24;">
+    [% claim_error | html %]
+  </div>
+  [% END %]
+
+  <fieldset>
+    <legend>Claim configuration</legend>
+    <p class="hint">
+      Enter the Library ID and one-time install token from CirriusImpact to pull SFTP host/user/password and feature flags.
+      After a successful claim, Connection and Features below are filled in (you can still edit and Save).
+    </p>
+    [% IF bootstrap_claimed_at %]
+    <p class="hint">
+      Last claimed: <strong>[% bootstrap_claimed_at | html %]</strong>
+      [% IF bootstrap_library_id %] for library <strong>[% bootstrap_library_id | html %]</strong>[% END %]
+    </p>
+    [% END %]
+    <form method="get" style="margin-bottom: 1.5em;">
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="hidden" name="claim" value="1"/>
+      <div class="form-group">
+        <label>Bootstrap API URL</label>
+        <input type="text" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]" class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Library ID</label>
+        <input type="text" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]" class="form-control" autocomplete="off"/>
+      </div>
+      <div class="form-group">
+        <label>Install token</label>
+        <input type="password" name="bootstrap_token" value="" class="form-control" autocomplete="off"/>
+      </div>
+      <button type="submit" class="btn btn-primary">Claim / Re-claim</button>
+    </form>
+  </fieldset>
+
   <form method="get">
     <input type="hidden" name="class" value="[% CLASS %]"/>
     <input type="hidden" name="method" value="[% METHOD %]"/>
     <input type="hidden" name="save" value="1"/>
+    <input type="hidden" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]"/>
+    <input type="hidden" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]"/>
 
     <fieldset>
       <legend>Connection</legend>
@@ -21,6 +66,29 @@
       <div class="form-group"><label>Username</label><input type="text" name="username" value="[% username %]" class="form-control"/></div>
       <div class="form-group"><label>Password</label><input type="password" name="password" value="[% password %]" class="form-control"/></div>
       <div class="form-group"><label>Archive dir</label><input type="text" name="archive_dir" value="[% archive_dir %]" class="form-control"/></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Branches</legend>
+      <p class="hint">
+        Only notices for patrons whose <strong>home library</strong> is checked are exported to CirriusImpact.
+        Leave all checked (default) to include every branch. Uncheck libraries that are not on this service.
+      </p>
+      [% IF libraries.size %]
+        <div class="branch-enable-list" style="max-height: 16em; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em 1em;">
+          [% FOREACH lib IN libraries %]
+            <div class="checkbox">
+              <label>
+                <input type="checkbox" name="enabled_branches" value="[% lib.branchcode | html %]"
+                  [% IF lib.enabled %]checked="checked"[% END %]>
+                [% lib.branchname | html %] ([% lib.branchcode | html %])
+              </label>
+            </div>
+          [% END %]
+        </div>
+      [% ELSE %]
+        <p class="hint">No libraries found in this Koha instance.</p>
+      [% END %]
     </fieldset>
 
     <fieldset>

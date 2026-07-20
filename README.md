@@ -1,3 +1,5 @@
+> **Dev track branch `bootstrap/1.3.0-dev-claim`:** version `1.3.0-dev` (claim UI + branch filter). Production remains `1.2.4` on `main`.
+
 # koha-plugin-cirriusimpact
 
 CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpact SMS/Voice service (shared with Koha / ByWater).
