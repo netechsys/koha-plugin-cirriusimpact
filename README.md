@@ -4,7 +4,7 @@ CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpac
 
 **Repository:** https://github.com/netechsys/koha-plugin-cirriusimpact
 
-**Latest install package (v1.2.3):** [Download koha-plugin-cirriusimpact-v1.2.3.kpz](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/download/v1.2.3/koha-plugin-cirriusimpact-v1.2.3.kpz) — or open [Releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/latest) and download from **Assets**.
+**Latest install package (v1.2.4):** [Download koha-plugin-cirriusimpact-v1.2.4.kpz](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/download/v1.2.4/koha-plugin-cirriusimpact-v1.2.4.kpz) — or open [Releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/latest) and download from **Assets**.
 
 ## Support and troubleshooting
 

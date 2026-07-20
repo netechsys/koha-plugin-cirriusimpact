@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-Version: **1.1.41** (2026-01-10)
+Version: **1.2.4** (2026-07-20)
 
 ## Overview
 
@@ -10,15 +10,14 @@ This plugin integrates Koha ILS with CirriusImpact messaging services, forwardin
 
 ## Key Features
 
-### Latest Updates (v1.1.41)
-- **Fixed Plugin Loading**: Resolved subroutine redefinition errors caused by duplicate nested plugin files
-- **Automatic SMS Driver Discovery**: SMS drivers are automatically included in KPZ and discoverable via plugin @INC modification
-- **OpenAPI Issues Resolved**: Removed problematic OpenAPI validation that caused hangs during SMSSendDriver configuration
-- **KPZ Structure Improved**: Fixed KPZ packaging to exclude nested duplicate files
-- **Improved Stability**: Plugin now loads and configures without errors or warnings
+### Latest Updates (v1.2.4)
+- **Multilingual notice templates**: `install_message_templates.pl` installs English (`default`), Spanish (`es-ES`), and French (`fr-CA`) CirriusImpact YAML notices
+- **CSV language normalization**: Koha IETF tags map to `eng` / `spa` / `fre` for the Notification Processor
+- **GSM-7-safe SMS** for Spanish/French (ASCII) to keep ~160 char segments — see `TEMPLATE_I18N.md`
+- **HOLD YAML parse fix (v1.2.3)**: single-line Koha YAML no longer drops `sms.text` / `call.script`
 
-### CSV Export (v1.1.41)
-- **Complete CSV Output**: Generates CSV files with all 25 required fields for CirriusImpact integration
+### CSV Export
+- **Complete CSV Output**: Generates CSV files with all required fields for CirriusImpact integration (including optional `messageText`)
 - **Multi-Transport Support**: Handles SMS, Phone/Voice, Email, and WhatsApp messages
 - **Smart ODUE Suppression**: Automatically suppresses phone messages when SMS exists for the same patron and ODUE notice
 - **Accurate Title Resolution**: Shows correct book titles for different ODUE levels (ODUE, ODUE2, ODUE3)

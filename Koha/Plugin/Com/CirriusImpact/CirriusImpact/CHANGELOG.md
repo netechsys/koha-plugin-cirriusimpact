@@ -1,3 +1,11 @@
+## 1.2.4 - 2026-07-20
+
+### Multilingual notice templates (default / es-ES / fr-CA)
+- **ADDED:** `install_message_templates.pl` installs English (`default`), Spanish (`es-ES`), and French (`fr-CA`) CirriusImpact YAML notices; `--languages` and `--no-restart` CLI options.
+- **ADDED:** SMS bodies for spa/fre use GSM-7-safe ASCII so segments stay ~160 characters (accents would force UCS-2 ~70).
+- **ADDED:** `_ci_normalize_language()` maps Koha IETF tags (`es-ES`, `fr-CA`, `default`) to CirriusImpact CSV `language` values `spa` / `fre` / `eng`.
+- **ADDED:** `TEMPLATE_I18N.md` operator guide (ILS-neutral Notification Processor terminology).
+
 ## 1.2.3 - 2026-07-07
 
 ### HOLD CSV: wrong overdue messageText when Koha stores single-line YAML

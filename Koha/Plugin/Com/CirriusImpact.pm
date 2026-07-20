@@ -48,7 +48,7 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.2.3";
+our $VERSION         = "1.2.4";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -72,6 +72,21 @@ sub _ci_render_tt {
     my $out = '';
     $tt->process(\$s, $vars, \$out) or return '';
     return $out;
+}
+
+# Map Koha borrower/notice lang tags → CirriusImpact eng|spa|fre.
+# Koha TranslateNotices uses IETF tags (es-ES, fr-CA); Notification Processor LANGUAGE_ALLOWED expects eng/spa/fre.
+sub _ci_normalize_language {
+    my ($raw) = @_;
+    my $lang = defined $raw ? lc($raw) : '';
+    $lang =~ s/^\s+|\s+$//g;
+    return 'eng' if $lang eq '' || $lang eq 'default' || $lang eq 'eng' || $lang eq 'en' || $lang =~ /^en[-_]/;
+
+    return 'spa' if $lang eq 'spa' || $lang eq 'es' || $lang eq 'spanish' || $lang =~ /^es[-_]/;
+    return 'fre' if $lang eq 'fre' || $lang eq 'fra' || $lang eq 'fr' || $lang eq 'french' || $lang =~ /^fr[-_]/;
+
+    # Unknown tag — pass through lowercased so TEXT_LANGUAGE_ALLOWED aliases can still match
+    return $lang;
 }
 
 sub new {
@@ -998,7 +1013,7 @@ sub _generate_csv_output {
         # Build row data from the transport section
         my %row_data;
         $row_data{commType} = $commType;
-        $row_data{language} = ($transport_section->{language} && $transport_section->{language} ne 'default') ? $transport_section->{language} : 'eng';
+        $row_data{language} = _ci_normalize_language($transport_section->{language});
         # Get notification type and level from configurable mapping
         my $letter_code = $transport_section->{meta}->{letter_code} || $message_type->{letter_code} || '';
         my $notification_info = $self->_get_notification_type_and_level($letter_code);
@@ -1333,7 +1348,7 @@ $self->_ci_apply_transport_fallback_text(
             my %mf = (
                 msgid              => defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '',
                 commType           => $commType,
-                language           => (defined $pat->{lang} && $pat->{lang} ne 'default') ? $pat->{lang} : 'eng',
+                language           => _ci_normalize_language($pat->{lang}),
                 # Get notification type and level from configurable mapping
                 notificationType   => $self->_get_notification_type_and_level($msgt->{letter_code})->{type} || '',
                 notificationLevel  => $self->_get_notification_type_and_level($msgt->{letter_code})->{level} || '',
@@ -1556,7 +1571,7 @@ $self->_ci_apply_transport_fallback_text(
 
                 $mf->{msgid}              = defined $h_hold->{reserve_id}       ? $h_hold->{reserve_id}       : '';
                 $mf->{commType}           = $commType;
-                $mf->{language}           = (defined $pat->{lang} && $pat->{lang} ne 'default') ? $pat->{lang} : 'eng';
+                $mf->{language}           = _ci_normalize_language($pat->{lang});
                 # Get notification type and level from configurable mapping
                 $mf->{notificationType}   = $self->_get_notification_type_and_level($msgt->{letter_code})->{type} || '';
                 $mf->{notificationLevel}  = $self->_get_notification_type_and_level($msgt->{letter_code})->{level} || '';
@@ -2239,7 +2254,7 @@ sub _ci_postfill_sms {
     my $msgid        = $get->($hraw, 'reserve_id', $data->{message}{message_id});
     my $itemsID      = $get->($hraw, 'biblionumber', $get->($biblio, 'biblionumber',''));
 
-    my $lang         = $get->($patron, 'lang', '');
+    my $lang         = _ci_normalize_language($get->($patron, 'lang', ''));
     my $transport    = $data->{message}{transport} // $data->{message_type}{transport} // 'sms';
 
     my $s = ($data->{sms} //= {});
