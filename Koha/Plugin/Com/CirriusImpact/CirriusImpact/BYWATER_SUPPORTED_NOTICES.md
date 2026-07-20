@@ -169,7 +169,7 @@ Please confirm:
 | `notification_mapping.yml` | Koha letter code → CirriusImpact type/level |
 | `CirriusImpact.pm` → `before_send_messages` | Notice selection and CSV export |
 | `NOTIFICATION_TYPES.md` | In-plugin documentation of mappings |
-| `RELEASE_NOTES_v1.2.2.md` | PREDUE item matching + DUE/DUEDGST mapping |
+| `RELEASE_NOTES_v1.2.4.md` | Current production release notes |
 
 ---
 

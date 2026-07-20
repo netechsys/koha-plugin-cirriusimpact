@@ -230,7 +230,7 @@ sub print_next_steps {
     print "\n";
     print "3. Configure your notice templates:\n";
     print "   - Add 'CirriusImpact: yes' to the YAML header\n";
-    print "   - See NOTICE_EXAMPLES.md for digest templates\n";
+    print "   - See QUICKSTART.md / TEMPLATE_I18N.md for notice templates\n";
     print "\n";
     print "4. Test the message queue:\n";
     print "   - Run: sudo koha-shell INSTANCE -c '/usr/share/koha/bin/cronjobs/process_message_queue.pl'\n";
