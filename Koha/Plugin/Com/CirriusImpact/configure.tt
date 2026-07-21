@@ -1,0 +1,418 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>CirriusImpact - Configuration</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head><body>
+[% INCLUDE 'header.inc' %]
+<div id="breadcrumbs">
+  <a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo;
+  <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo;
+  CirriusImpact &rsaquo; Configuration
+</div>
+
+<div class="main container">
+  [% IF claim_message %]
+  <div class="alert alert-success" style="margin: 1em 0; padding: 0.75em 1em; background: #d4edda; border: 1px solid #c3e6cb; color: #155724;">
+    [% claim_message | html %]
+  </div>
+  [% END %]
+  [% IF claim_error %]
+  <div class="alert alert-error" style="margin: 1em 0; padding: 0.75em 1em; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24;">
+    [% claim_error | html %]
+  </div>
+  [% END %]
+
+  <fieldset>
+    <legend>Claim configuration</legend>
+    <p class="hint">
+      Enter the Library ID and one-time install token from CirriusImpact to pull SFTP host/user/password and feature flags.
+      After a successful claim, Connection and Features below are filled in (you can still edit and Save).
+    </p>
+    [% IF bootstrap_claimed_at %]
+    <p class="hint">
+      Last claimed: <strong>[% bootstrap_claimed_at | html %]</strong>
+      [% IF bootstrap_library_id %] for library <strong>[% bootstrap_library_id | html %]</strong>[% END %]
+    </p>
+    [% END %]
+    <form method="get" style="margin-bottom: 1.5em;">
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="hidden" name="claim" value="1"/>
+      <div class="form-group">
+        <label>Bootstrap API URL</label>
+        <input type="text" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]" class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Library ID</label>
+        <input type="text" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]" class="form-control" autocomplete="off"/>
+      </div>
+      <div class="form-group">
+        <label>Install token</label>
+        <input type="password" name="bootstrap_token" value="" class="form-control" autocomplete="off"/>
+      </div>
+      <button type="submit" class="btn btn-primary">Claim / Re-claim</button>
+    </form>
+  </fieldset>
+
+  <form method="get">
+    <input type="hidden" name="class" value="[% CLASS %]"/>
+    <input type="hidden" name="method" value="[% METHOD %]"/>
+    <input type="hidden" name="save" value="1"/>
+    <input type="hidden" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]"/>
+    <input type="hidden" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]"/>
+
+    <fieldset>
+      <legend>Connection</legend>
+      <div class="form-group"><label>Host</label><input type="text" name="host" value="[% host %]" class="form-control"/></div>
+      <div class="form-group"><label>Username</label><input type="text" name="username" value="[% username %]" class="form-control"/></div>
+      <div class="form-group"><label>Password</label><input type="password" name="password" value="[% password %]" class="form-control"/></div>
+      <div class="form-group"><label>Archive dir</label><input type="text" name="archive_dir" value="[% archive_dir %]" class="form-control"/></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Branch services</legend>
+      [% IF consortia_mode == 'independent' %]
+      <p class="hint">
+        Type 2 (independent): assign each Koha home branch to a Portal member, then enable
+        SMS / CIXL / Outbound per member within Portal entitlements. CIXL requires SMS.
+        Unassigned branches and disabled services are not exported (sms/phone marked failed).
+      </p>
+      [% IF member_catalog.size %]
+        <h4>Member services (within entitlements)</h4>
+        <div class="member-service-matrix" style="max-height: 14em; overflow: auto; border: 1px solid #ccc; margin-bottom: 1em;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Member</th>
+                <th style="padding: 0.5em; text-align: center;">SMS</th>
+                <th style="padding: 0.5em; text-align: center;">CIXL</th>
+                <th style="padding: 0.5em; text-align: center;">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH m IN member_catalog %]
+              <tr data-member="[% m.library_id | html %]">
+                <td style="padding: 0.4em 0.5em;"><code>[% m.library_id | html %]</code></td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-sms" name="mem_sms_[% m.library_id | html %]" value="1"
+                    [% IF m.sms %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-cixl" name="mem_cixl_[% m.library_id | html %]" value="1"
+                    data-entitle-cixl="[% IF m.entitle_cixl %]1[% ELSE %]0[% END %]"
+                    [% IF m.cixl %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_cixl && m.sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-outbound" name="mem_outbound_[% m.library_id | html %]" value="1"
+                    [% IF m.outbound %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_outbound %]disabled="disabled"[% END %]>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+        <h4>Branch → member</h4>
+        <div class="branch-member-matrix" style="max-height: 22em; overflow: auto; border: 1px solid #ccc;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Branch</th>
+                <th style="padding: 0.5em;">Member</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH lib IN libraries %]
+              <tr>
+                <td style="padding: 0.4em 0.5em;">[% lib.branchname | html %] ([% lib.branchcode | html %])</td>
+                <td style="padding: 0.4em 0.5em;">
+                  <select name="branch_member_[% lib.branchcode | html %]" class="form-control">
+                    <option value="">— unassigned —</option>
+                    [% FOREACH m IN member_catalog %]
+                    <option value="[% m.library_id | html %]"
+                      [% IF lib.member_library == m.library_id %]selected="selected"[% END %]>
+                      [% m.library_id | html %]
+                    </option>
+                    [% END %]
+                  </select>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+      [% ELSE %]
+        <p class="hint">No member catalog yet. Link members on the Portal Consortia screen, then Re-claim.</p>
+      [% END %]
+      [% ELSE %]
+      <p class="hint">
+        Select which services each <strong>home library</strong> may send to CirriusImpact.
+        Unchecked branches/services are not exported: their SMS/phone notices are
+        marked failed in Koha with the reason, so Koha does not try to send them itself.
+        New branches default off until configured. CIXL requires SMS.
+        On Save, the selection is synced to the Configuration Portal (requires a successful Claim first).
+      </p>
+      [% IF libraries.size %]
+        <div class="branch-service-matrix" style="max-height: 22em; overflow: auto; border: 1px solid #ccc;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Branch</th>
+                <th style="padding: 0.5em; text-align: center;">SMS</th>
+                <th style="padding: 0.5em; text-align: center;">CIXL</th>
+                <th style="padding: 0.5em; text-align: center;">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH lib IN libraries %]
+              <tr data-branch="[% lib.branchcode | html %]">
+                <td style="padding: 0.4em 0.5em;">[% lib.branchname | html %] ([% lib.branchcode | html %])</td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-sms" name="svc_sms_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.sms %]checked="checked"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-cixl" name="svc_cixl_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.cixl %]checked="checked"[% END %]
+                    [% UNLESS lib.sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-outbound" name="svc_outbound_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.outbound %]checked="checked"[% END %]>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin-top: 0.5em;">CIXL appends an Interactive Portal short URL to SMS notices for that branch.</p>
+      [% ELSE %]
+        <p class="hint">No libraries found in this Koha instance.</p>
+      [% END %]
+      [% END %]
+    </fieldset>
+
+    <fieldset>
+      <legend>Features</legend>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
+          Skip calling ODUE if patron has SMS or Email
+        </label>
+      </div>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="include_messagetext" value="1"
+            [% IF include_messagetext %]checked="checked"[% END %]>
+          Include messageText column in CSV output
+        </label>
+      </div>
+      [% IF consortia_mode %]
+      <p class="hint">Consortia mode: <strong>[% consortia_mode | html %]</strong></p>
+      [% END %]
+    </fieldset>
+
+    <fieldset>
+      <legend>JSON Section Order</legend>
+      <input type="text" name="section_order" value="[% section_order %]" class="form-control"/>
+      <p class="hint">
+        Comma-separated sections. Available: <code>message_type</code>, <code>patron</code>, <code>items</code>, <code>call</code>, <code>sms</code>, <code>message</code>
+      </p>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+</div>
+
+<script>
+function copyPre(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var text = el.innerText;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+
+(function () {
+  function syncCixl(row) {
+    if (!row) return;
+    var sms = row.querySelector('.svc-sms');
+    var cixl = row.querySelector('.svc-cixl');
+    if (!sms || !cixl) return;
+    if (sms.checked) {
+      cixl.disabled = false;
+    } else {
+      cixl.checked = false;
+      cixl.disabled = true;
+    }
+  }
+  document.querySelectorAll('.branch-service-matrix tr[data-branch]').forEach(function (row) {
+    syncCixl(row);
+    var sms = row.querySelector('.svc-sms');
+    if (sms) {
+      sms.addEventListener('change', function () { syncCixl(row); });
+    }
+  });
+
+  function syncMemCixl(row) {
+    if (!row) return;
+    var sms = row.querySelector('.mem-sms');
+    var cixl = row.querySelector('.mem-cixl');
+    if (!sms || !cixl) return;
+    var entitled = cixl.getAttribute('data-entitle-cixl') === '1';
+    if (entitled && sms.checked && !sms.disabled) {
+      cixl.disabled = false;
+    } else {
+      cixl.checked = false;
+      cixl.disabled = true;
+    }
+  }
+  document.querySelectorAll('.member-service-matrix tr[data-member]').forEach(function (row) {
+    syncMemCixl(row);
+    var sms = row.querySelector('.mem-sms');
+    if (sms) {
+      sms.addEventListener('change', function () { syncMemCixl(row); });
+    }
+  });
+})();
+</script>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<hr>
+<h3>Updated Examples</h3>
+<p>Use the sample YAML below. Only the block matching the message <em>transport</em> is exported (<code>call</code> for phone, <code>sms</code> for SMS, <code>email</code> for Email, <code>whatsapp</code> for WhatsApp).</p>
+<pre><code>
+Phone (Call) notice — sample YAML:
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+call:
+    to: "&lt;&lt;borrowers.phone&gt;&gt;,&lt;&lt;borrowers.smsalertnumber&gt;&gt;"
+    reference: "&lt;&lt;message.message_id&gt;&gt;"
+    script: "Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;. This is &lt;&lt;branches.branchname&gt;&gt;. You have holds ready for pickup:  &lt;&lt;biblio.title&gt;&gt;. Please pickup them up at &lt;&lt;branches.branchname&gt;&gt;. For questions, call &lt;&lt;branches.branchphone&gt;&gt;."
+    msgid: "&lt;&lt;reserves.reserve_id&gt;&gt;"
+    commType: 
+    language: "&lt;&lt;borrowers.lang&gt;&gt;"
+    notificationType: "&lt;&lt;message_type.transport&gt;&gt;"
+    notificationLevel: 
+    patronBarCode: "&lt;&lt;borrowers.cardnumber&gt;&gt;"
+    STAB_userSaluation: "&lt;&lt;borrowers.title&gt;&gt;"
+    patronFirstName: "&lt;&lt;borrowers.firstname&gt;&gt;"
+    patronLastName: "&lt;&lt;borrowers.surname&gt;&gt;"
+    phone: "&lt;&lt;borrowers.phone&gt;&gt;"
+    email: "&lt;&lt;borrowers.email&gt;&gt;"
+    branch: "&lt;&lt;branches.branchcode&gt;&gt;"
+    branchname: "&lt;&lt;branches.branchname&gt;&gt;"
+    itemsID: "&lt;&lt;reserves.biblionumber&gt;&gt;"
+    date: "&lt;&lt;reserves.waitingdate&gt;&gt;"
+    title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+    DeliveryOptionID: 
+    LanguageID: 
+    NotificationTypeID: 
+    ReportingOrgID: 
+    PatronID: "&lt;&lt;borrowers.borrowernumber&gt;&gt;"
+    ItemRecordID: 
+    RequestID: "&lt;&lt;reserves.reserve_id&gt;&gt;"
+    PickupAreaDescription: "&lt;&lt;branches.pickup_location&gt;&gt;"
+    TxnID: 
+    AccountBalance: 
+
+SMS notice — sample YAML:
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+sms:
+  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  commType:
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  notificationLevel:
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  email: &lt;&lt;borrowers.email&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  DeliveryOptionID:
+  LanguageID:
+  NotificationTypeID:
+  ReportingOrgID:
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  ItemRecordID:
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+  PickupAreaDescription: "&quot;&lt;&lt;branches.pickup_location&gt;&gt;&quot;"
+  TxnID:
+  AccountBalance:
+
+Email notice — sample YAML (extrapolated):
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+email:
+  to: &lt;&lt;borrowers.email&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  subject: "&lt;&lt;message.subject&gt;&gt;"
+  html: "&lt;p&gt;Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;,&lt;/p&gt;&lt;p&gt;You have holds ready for pickup: &lt;strong&gt;&lt;&lt;biblio.title&gt;&gt;&lt;/strong&gt; at &lt;strong&gt;&lt;&lt;branches.branchname&gt;&gt;&lt;/strong&gt;.&lt;/p&gt;&lt;p&gt;Questions? Call &lt;&lt;branches.branchphone&gt;&gt;.&lt;/p&gt;"
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  branchphone: &lt;&lt;branches.branchphone&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+
+WhatsApp notice — sample YAML (extrapolated):
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+whatsapp:
+  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  email: &lt;&lt;borrowers.email&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+</code></pre>
