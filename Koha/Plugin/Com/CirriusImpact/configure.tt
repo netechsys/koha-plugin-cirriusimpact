@@ -69,24 +69,47 @@
     </fieldset>
 
     <fieldset>
-      <legend>Branches</legend>
+      <legend>Branch services</legend>
       <p class="hint">
-        Only notices for patrons whose <strong>home library</strong> is checked are exported to CirriusImpact.
-        Leave all checked (default) to include every branch. Uncheck libraries that are not on this service.
-        On Save, the selection is also sent to the Configuration Portal (requires a successful Claim first).
+        Select which services each <strong>home library</strong> may send to CirriusImpact.
+        Unchecked branches/services stay pending in Koha and are not exported.
+        New branches default off until configured. CIXL requires SMS.
+        On Save, the selection is synced to the Configuration Portal (requires a successful Claim first).
       </p>
       [% IF libraries.size %]
-        <div class="branch-enable-list" style="max-height: 16em; overflow-y: auto; border: 1px solid #ccc; padding: 0.5em 1em;">
-          [% FOREACH lib IN libraries %]
-            <div class="checkbox">
-              <label>
-                <input type="checkbox" name="enabled_branches" value="[% lib.branchcode | html %]"
-                  [% IF lib.enabled %]checked="checked"[% END %]>
-                [% lib.branchname | html %] ([% lib.branchcode | html %])
-              </label>
-            </div>
-          [% END %]
+        <div class="branch-service-matrix" style="max-height: 22em; overflow: auto; border: 1px solid #ccc;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Branch</th>
+                <th style="padding: 0.5em; text-align: center;">SMS</th>
+                <th style="padding: 0.5em; text-align: center;">CIXL</th>
+                <th style="padding: 0.5em; text-align: center;">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH lib IN libraries %]
+              <tr data-branch="[% lib.branchcode | html %]">
+                <td style="padding: 0.4em 0.5em;">[% lib.branchname | html %] ([% lib.branchcode | html %])</td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-sms" name="svc_sms_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.sms %]checked="checked"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-cixl" name="svc_cixl_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.cixl %]checked="checked"[% END %]
+                    [% UNLESS lib.sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-outbound" name="svc_outbound_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.outbound %]checked="checked"[% END %]>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
         </div>
+        <p class="hint" style="margin-top: 0.5em;">CIXL appends an Interactive Portal short URL to SMS notices for that branch.</p>
       [% ELSE %]
         <p class="hint">No libraries found in this Koha instance.</p>
       [% END %]
@@ -95,13 +118,6 @@
     <fieldset>
       <legend>Features</legend>
       <div class="checkbox">
-        <label><input type="checkbox" name="enable_phone" value="1" [% IF enable_phone %]checked="checked"[% END %]> Enable Phone</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_sms" value="1" [% IF enable_sms %]checked="checked"[% END %]> Enable SMS</label>
-      </div>
-
-      <div class="checkbox">
         <label>
           <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
           Skip calling ODUE if patron has SMS or Email
@@ -109,10 +125,18 @@
       </div>
       <div class="checkbox">
         <label>
-          <input type="checkbox" name="include_messagetext" value="1" [% IF include_messagetext %]checked="checked"[% END %]>
+          <input type="checkbox" name="include_messagetext" value="1"
+            [% IF include_messagetext %]checked="checked"[% END %]
+            [% IF messagetext_locked %]disabled="disabled"[% END %]>
           Include messageText column in CSV output
+          [% IF messagetext_locked %]
+            <em>(locked off for independent consortia — member templates render after routing)</em>
+          [% END %]
         </label>
       </div>
+      [% IF consortia_mode %]
+      <p class="hint">Consortia mode: <strong>[% consortia_mode | html %]</strong></p>
+      [% END %]
     </fieldset>
 
     <fieldset>
@@ -143,6 +167,28 @@ function copyPre(id) {
     document.body.removeChild(ta);
   }
 }
+
+(function () {
+  function syncCixl(row) {
+    if (!row) return;
+    var sms = row.querySelector('.svc-sms');
+    var cixl = row.querySelector('.svc-cixl');
+    if (!sms || !cixl) return;
+    if (sms.checked) {
+      cixl.disabled = false;
+    } else {
+      cixl.checked = false;
+      cixl.disabled = true;
+    }
+  }
+  document.querySelectorAll('.branch-service-matrix tr[data-branch]').forEach(function (row) {
+    syncCixl(row);
+    var sms = row.querySelector('.svc-sms');
+    if (sms) {
+      sms.addEventListener('change', function () { syncCixl(row); });
+    }
+  });
+})();
 </script>
 
 [% INCLUDE 'intranet-bottom.inc' %]
