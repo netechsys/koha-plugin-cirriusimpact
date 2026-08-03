@@ -37,8 +37,8 @@ Produces `koha-plugin-cirriusimpact-v{VERSION}.kpz` (version from `Koha/Plugin/C
 ## Install on Koha
 
 1. **Koha Administration → Plugins → Upload** the `.kpz`
-2. Configure SFTP connection (or use Claim when CirriusImpact provides an install token)
-3. Optionally run `install_message_templates.pl` via `koha-shell` (see TEMPLATE_I18N.md)
+2. **Configure → Claim** with Library ID + install token (fills SFTP), then set **Branch services** and **Save**
+3. Run `install_message_templates.pl` via `koha-shell` (see [QUICKSTART.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/QUICKSTART.md) / [INSTALL.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/INSTALL.md))
 
 ## Support
 

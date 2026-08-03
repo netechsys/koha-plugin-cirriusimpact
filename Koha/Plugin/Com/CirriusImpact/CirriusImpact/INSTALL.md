@@ -41,23 +41,44 @@ Set the following system preferences in Koha:
 ### 3. Configure the Plugin
 
 1. Go to: **Tools > Plugins**
-2. Find **CirriusImpact** in the list
-3. Click **Actions > Configure**
-4. Enter your configuration:
-   - **SFTP Host**: Provided by CirriusImpact
-   - **SFTP Username**: Provided by CirriusImpact
-   - **SFTP Password**: Provided by CirriusImpact
-   - **Archive Directory**: `/var/lib/koha/INSTANCE/CirriusImpact_archive`
-   - **Enable SMS**: Check to enable SMS notifications
-   - **Enable Phone**: Check to enable voice call notifications
-   - **Enable Email**: Check to enable email notifications
-   - **Enable WhatsApp**: Check to enable WhatsApp notifications
-   - **Skip ODUE phone if SMS/Email**: Check to suppress voice calls when SMS/Email exists
-5. Click **Save**
+2. Find **CirriusImpact** → **Actions > Configure**
+
+#### Claim (preferred)
+
+| Field | Purpose |
+|-------|---------|
+| **Bootstrap API URL** | Portal claim endpoint from CirriusImpact |
+| **Library ID** | Portal library (standalone, Type 1, or Type 2 **root**) |
+| **Install token** | One-time token from CirriusImpact |
+
+Click **Claim / Re-claim**. Connection (Host / Username / Password / Archive dir) is filled from the Portal payload. You can still edit and **Save**.
+
+Type 2 **members** must not Claim — only the root library on the shared Koha instance.
+
+#### Branch services
+
+There are no global Enable SMS / Phone checkboxes. Services are **per home branch** (opt-in; new branches default off).
+
+**Standalone / Type 1 (`consortia_mode=shared`):** matrix columns **SMS**, **CIXL** (requires SMS), **Outbound** (voice).
+
+**Type 2 (`consortia_mode=independent`):** **Member services** (SMS / CIXL / Outbound within Portal entitlements) plus **Branch → member** assignment.
+
+On **Save**, the selection syncs to the Configuration Portal (requires a prior successful Claim).
+
+Notices for an unchecked branch/service are **not exported**; those SMS/phone `message_queue` rows are marked **failed** with a reason.
+
+#### Features
+
+- **Skip calling ODUE if patron has SMS or Email**
+- **Include messageText column in CSV output**
+
+Click **Save**.
+
+Manual Connection fields remain if CirriusImpact directs you not to use Claim. Typical archive path: `/var/lib/koha/INSTANCE/CirriusImpact_archive`.
 
 ### 4. Install Message Templates (Recommended)
 
-The plugin includes `install_message_templates.pl`, which installs CirriusImpact-ready notice templates into Koha's `letter` table. Run it as the Koha instance user:
+The plugin includes `install_message_templates.pl`, which installs CirriusImpact-ready notice templates into Koha's `letter` table. Run it as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can read enabled branches):
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -71,9 +92,9 @@ sudo koha-shell INSTANCE -c \
 | `--defaults` (default) | Stock letter `CODE` at `branchcode=''` | Single-library sites |
 | `--ci-templates` | `CODE-CI` only (`CHECKOUT-CI`, `HOLD-CI`, …); stock left alone | CI members use alternate letter codes |
 | `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped `letter.branchcode` | Consortia; Koha prefers branch templates |
-| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch in Configure → Branches | Consortia after branches are enabled |
+| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
 
-**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Plugin Configure → Branches values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
+**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
 
 The plugin export path recognizes both stock codes and `*-CI` variants.
 
@@ -109,7 +130,7 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --defaults --no-restart'
 ```
 
-**Consortia** (branch-scoped from plugin Configure → Branches):
+**Consortia** (branch-scoped from Configure → Branch services):
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -289,17 +310,18 @@ Look for:
 
 ### Error: "SFTP FAILED"
 
-**Solution:** Check your SFTP credentials in the plugin configuration:
-- Verify host, username, and password
-- Ensure port 222 is accessible
-- Check firewall rules
+**Solution:** Prefer **Claim / Re-claim** so Connection is filled from the Portal. Then verify:
+- Host, username, and password on the Configure → Connection section
+- Network path / firewall to the CirriusImpact SFTP endpoint (port provided by CirriusImpact)
+- That you Claimed the correct Library ID (Type 2: root only)
 
 ### No messages being processed
 
-**Solution:** Verify your notice templates:
-- Must include `CirriusImpact: yes` in YAML header
-- Must be properly formatted YAML
-- Check patron messaging preferences
+**Solution:**
+- Notice templates must include `CirriusImpact: yes` in the YAML header
+- Patron messaging preferences must include SMS and/or phone as appropriate
+- Configure → **Branch services**: the patron's home branch must have SMS and/or Outbound enabled
+- Type 2: branch must be assigned to a member with that service entitled and enabled
 
 ### CSV files empty (header only)
 

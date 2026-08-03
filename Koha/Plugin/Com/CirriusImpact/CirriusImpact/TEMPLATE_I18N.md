@@ -7,7 +7,7 @@
 | `--defaults` | Stock `CODE` at `branchcode=''` | Single library (default if no mode given) |
 | `--ci-templates` | `CODE-CI` only; stock untouched | Alternate letter codes for CI members |
 | `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped rows | Consortia |
-| `--consortia-from-plugin` | Same for Configure → Branches | Consortia after branch enable |
+| `--consortia-from-plugin` | Same for Configure → Branch services (enabled branches) | Consortia after matrix Save |
 
 `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, not `CHECKOUT-CPL`. The plugin also exports `*-CI` letter codes.
 

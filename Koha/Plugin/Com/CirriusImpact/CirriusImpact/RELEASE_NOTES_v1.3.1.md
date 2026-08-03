@@ -11,7 +11,7 @@
   - `--defaults` — update system-default letters (`letter.branchcode = ''`). Default when no mode is given.
   - `--ci-templates` — create/update `CODE-CI` letters only (`CHECKOUT-CI`, `HOLD-CI`, …); leave stock `CODE` alone. Point member messaging / overdue rules at the `-CI` codes for CI members only.
   - `--consortia-branch=CODE` — same letter `CODE`, branch-scoped `letter.branchcode` (repeatable / comma-separated). Creates `CHECKOUT` with `branchcode=CPL`, **not** `CHECKOUT-CPL` / `CHECKOUT-KDEMO_CPL`.
-  - `--consortia-from-plugin` — same as `--consortia-branch` for every Koha branchcode in Configure → Branches (`enabled_branches`). Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
+  - `--consortia-from-plugin` — same as `--consortia-branch` for every Koha branchcode with a service enabled in Configure → **Branch services** (`enabled_branches`). Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
 - **Plugin export** recognizes `*-CI` letter codes for filters, notification mapping, HOLDDGST digest grouping, and CHECKOUT/CHECKIN/HOLD backfill.
 
 ### Recommendation

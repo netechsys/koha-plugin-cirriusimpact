@@ -4,50 +4,40 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download Latest Released version of Plugin from the GIT Repository.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.1**.
 
 ## Installation (10 minutes)
 
-### Step 1: Upload Plugin to Koha from the Administration Website.
+### Step 1: Upload Plugin to Koha
 
-1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` file from the [GitHub releases page](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the downloaded KPZ file (e.g., `CirriusImpact-1.1.41.kpz`)
-4. Click **Upload**
-5. Wait for upload and installation to complete
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.1.kpz`)
+4. Click **Upload** and wait for installation to complete
 
-**Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation. They are automatically discoverable via the plugin's @INC modification - **no manual installation required!**
+**Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
 
-The drivers are automatically extracted to:
+Drivers land under:
 - `/var/lib/koha/{instance}/plugins/SMS/Send/CirriusImpact.pm` (international)
 - `/var/lib/koha/{instance}/plugins/SMS/Send/US/CirriusImpact.pm` (regional + international)
 
 ### Step 2: Configure Koha System Preference
 
-Set the SMS driver in Koha:
+**More > Administration → System preferences → Patrons** (search for SMS):
 
-**More > Administration**
+| Preference | Value |
+|------------|-------|
+| **SMSSendDriver** | `US::CirriusImpact` (recommended; regional + international) |
+| **SMSSendUsername** | leave blank (plugin) |
+| **SMSSendPassword** | leave blank (plugin) |
 
-- Enter SMS in System preferences and select Search.
-
-- Enter value for **SMSSendDriver**: and select Save all Patrons Preferences.
-
-**Recommended:** 
-- **SMSSendDriver**: `US::CirriusImpact`  
-  *(Accepts both regional and international phone numbers)*
-
-**Alternative (international only):**
-- **SMSSendDriver**: `CirriusImpact`  
-  *(Requires + prefix on all phone numbers)*
+Alternative (international only): `CirriusImpact` — requires a `+` prefix on all phone numbers.
 
 ### Step 3: Verify Installation
 
-Run the verification script in the SSH session:
-
 ```bash
-cd /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/
-sudo koha-shell INSTANCE (where INSTANCE is the library instance name.)
-perl verify_installation.pl
+sudo koha-shell INSTANCE -c \
+  'cd /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact && perl verify_installation.pl'
 ```
 
 **Expected output:**
@@ -59,56 +49,109 @@ perl verify_installation.pl
 ✓ All checks passed!
 ```
 
-**Note:** The SMS drivers are automatically extracted during KPZ installation. The verification script confirms they are discoverable at `/var/lib/koha/{instance}/plugins/SMS/Send/`.
+**Common warning (normal):** Archive directory not found → created automatically on first export.
 
-**Common warnings (normal):**
-- ⚠ Archive directory not found → **Will be created automatically on first run**
-
-### Step 4: Configure Plugin
+### Step 4: Configure Plugin (Claim + Branch services)
 
 1. Go to **More > Administration > Plugins**
 2. Find **CirriusImpact** → **Actions** → **Configure**
-3. Enter your settings:
-   - **SFTP Host**: (provided by CirriusImpact)
-   - **SFTP Username**: (provided by CirriusImpact)
-   - **SFTP Password**: (provided by CirriusImpact)
-   - **Archive Directory**: `/var/lib/koha/INSTANCE/CirriusImpact_archive`
-   
-   ** Based on Solution provided, select accordinly below **
-   - **Enable SMS**: ☑
-   - **Enable Phone**: ☑
-   - **Enable Email**: ☑
-   - **Enable WhatsApp**: ☑
-   - **Enable Skip calling ODUE if patron has SMS or Email**: ☑  (This will make the system only send the message in SMS of Email if the patron has that notification preference selected.  If this is not checked, and the patron has SMS or Email notification preferences configured, the system will send both SMS/Email and Phone notices.)
-   - **Include messageText column in CSV output**: ☑  (This will include the full message content in the CSV file. Uncheck to exclude messageText column for smaller CSV files.)
-4. Click **Save**
 
-### Step 5: Install Message Templates (Optional but Recommended)
+#### A. Claim configuration (preferred)
 
-Install pre-configured CirriusImpact notice templates from SSH. Run as the Koha instance user:
+Use the one-time install token CirriusImpact gives you. Claim fills Connection (SFTP) and sets consortia mode.
+
+| Field | What to enter |
+|-------|----------------|
+| **Bootstrap API URL** | From CirriusImpact (Portal claim endpoint) |
+| **Library ID** | Portal library name (standalone, Type 1 consortia, or Type 2 **root**) |
+| **Install token** | One-time token from CirriusImpact |
+
+Click **Claim / Re-claim**. After success, **Connection** shows Host / Username / Password / Archive dir (you may edit, then Save).
+
+**Type 2 members must not Claim** — only the root library claims on the shared Koha instance.
+
+Manual Connection fields remain available if CirriusImpact directs you not to use Claim.
+
+#### B. Branch services (replaces old Enable SMS / Phone checkboxes)
+
+Services are **per home branch** (opt-in). New branches default **off**.
+
+**Standalone / Type 1 (Standard Consortia — `consortia_mode=shared`):**
+
+| Column | Meaning |
+|--------|---------|
+| **SMS** | Export SMS notices for that branch |
+| **CIXL** | Append Interactive Portal short URL to SMS (requires SMS on the same branch) |
+| **Outbound** | Export voice/phone notices for that branch |
+
+On **Save**, the matrix syncs to the Configuration Portal (requires a successful Claim first).
+
+**Type 2 (Independent Consortia — `consortia_mode=independent`):**
+
+1. **Member services** — SMS / CIXL / Outbound per Portal member (within entitlements; CIXL requires SMS)
+2. **Branch → member** — assign each Koha branch to exactly one member
+
+#### C. Features
+
+| Option | Purpose |
+|--------|---------|
+| **Skip calling ODUE if patron has SMS or Email** | Suppress voice when SMS/email preference exists |
+| **Include messageText column in CSV output** | Larger CSV; include full rendered text |
+
+Click **Save**.
+
+**Export behavior:** Notices for a home branch/service that is unchecked are **not exported**. Those SMS/phone queue rows are marked **failed** with a reason so Koha does not retry them as its own SMS. Enable the branch/service before expecting CirriusImpact delivery.
+
+### Step 5: Install Message Templates (Recommended)
+
+Install CirriusImpact-ready notice templates into Koha's `letter` table. Run as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can see enabled branches).
 
 ```bash
 sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
 ```
 
-**Default behavior** (no mode flags → `--defaults`):
-- **Mode:** stock letter `CODE` at `branchcode=''`
-- **Services:** SMS and phone (`message_transport_type` = `sms` and `phone`)
-- **Languages:** `default`, `en`, `es-ES`, `fr-CA` (English, Spanish, French)
-- **Default tab:** Koha `letter.lang=default` is filled from English (`en`)
+#### Install modes (pick one)
 
-Other modes: `--ci-templates` (`CODE-CI` only), `--consortia-branch=CPL,UPL` (branch-scoped same CODE), `--consortia-from-plugin` (branches from Configure → Branches). See INSTALL.md.
+| Mode | What it writes | When to use |
+|------|----------------|-------------|
+| `--defaults` | Stock letter `CODE` at `branchcode=''` | Single library (default if no mode given) |
+| `--ci-templates` | `CODE-CI` only (`CHECKOUT-CI`, `HOLD-CI`, …); stock left alone | Alternate letter codes for CI members |
+| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped `letter.branchcode` | Consortia; explicit Koha branchcodes |
+| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
 
-Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more. All include CirriusImpact YAML markers and GSM-7-safe SMS text. Plugin also exports `*-CI` letter codes when those are used.
+**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Use Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`). The plugin also exports `*-CI` letter codes when those are used.
 
-#### Common install variations
+#### Default behavior (no mode flags → `--defaults`)
 
-**Consortia (from plugin branch list):**
+- Stock letter `CODE` at `branchcode=''`
+- Services: SMS and phone
+- Languages: `default`, `en`, `es-ES`, `fr-CA`
+- Default tab: filled from English (`en`)
+
+Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more.
+
+#### Common install commands
+
+**Single library:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --defaults --no-restart'
+```
+
+**Consortia (branches from Branch services matrix):**
 
 ```bash
 sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --consortia-from-plugin --no-restart'
+```
+
+**Consortia (explicit branches):**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --no-restart'
 ```
 
 **CODE-CI only** (leave stock letters alone):
@@ -118,7 +161,7 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --ci-templates --no-restart'
 ```
 
-**SMS only** (no phone/voice templates):
+**SMS only:**
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -132,31 +175,28 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --services=phone --no-restart'
 ```
 
-**Spanish-primary library** (Default tab = Spanish; still installs `en`, `es-ES`, `fr-CA`):
+**Spanish-primary Default tab:**
 
 ```bash
 sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --default-language=spa --no-restart'
 ```
 
-**SMS only, Spanish default:**
+**SMS only, Spanish default, English + Spanish rows:**
 
 ```bash
 sudo koha-shell INSTANCE -c \
-  'perl .../install_message_templates.pl --services=sms --default-language=spa --no-restart'
-```
-
-**Limit languages** (example: English and Spanish only):
-
-```bash
-sudo koha-shell INSTANCE -c \
-  'perl .../install_message_templates.pl --languages=default,en,es-ES --no-restart'
+  'perl .../install_message_templates.pl --services=sms --default-language=spa --languages=default,en,es-ES --no-restart'
 ```
 
 #### Options reference
 
 | Option | Values | Default |
 |--------|--------|---------|
+| `--defaults` | flag | used if no mode given |
+| `--ci-templates` | flag | off |
+| `--consortia-branch` | Koha branchcode(s), repeatable / comma-separated | none |
+| `--consortia-from-plugin` | flag | off |
 | `--services` | `sms`, `phone` (comma-separated) | `sms,phone` |
 | `--default-language` | `en`/`eng`, `es-ES`/`spa`, `fr-CA`/`fre` | `en` |
 | `--languages` | `default`, `en`, `es-ES`, `fr-CA` (comma-separated) | all four |
@@ -164,7 +204,7 @@ sudo koha-shell INSTANCE -c \
 
 Aliases: `--transports` = `--services`; `text`→sms; `voice`/`call`→phone.
 
-For multilingual notices, enable **TranslateNotices** and add `en` / `es-ES` / `fr-CA` to **OPACLanguages**. See `TEMPLATE_I18N.md` for language and SMS character details.
+For multilingual notices, enable **TranslateNotices** and add `en` / `es-ES` / `fr-CA` to **OPACLanguages**. See `TEMPLATE_I18N.md` and `INSTALL.md`.
 
 ### Step 6: Configure Notice Templates (If Not Using Auto-Install)
 
@@ -699,22 +739,25 @@ SMSSendDriver = 'US::CirriusImpact'
 ### "SFTP FAILED"
 
 **Check:**
-- SFTP credentials in plugin configuration
-- Network connectivity to SFTP host
-- Port 222 is accessible
+- Prefer **Claim / Re-claim** so Connection is filled from the Portal
+- Host / username / password on Configure → Connection
+- Network connectivity to the CirriusImpact SFTP endpoint
+- Correct Library ID (Type 2: root only)
 
 ### No messages processed
 
 **Check:**
 1. Notice templates have `CirriusImpact: yes` header
-2. Patron has SMS preferences enabled
-3. Messages are in pending status
+2. Patron has SMS (and/or phone) preferences enabled
+3. Configure → **Branch services**: home branch has SMS and/or Outbound enabled
+4. Messages are in pending status (failed rows for disabled branches are expected)
 
 ### Empty CSV files
 
 **Check:**
 1. Notice YAML is properly formatted
 2. Patrons have contact information (phone/email)
+3. Branch services matrix has the sending branch enabled
 3. Run with verbose mode:
    ```bash
    CirriusImpact_VERBOSE=1 sudo koha-shell INSTANCE -c "/usr/share/koha/bin/cronjobs/process_message_queue.pl"

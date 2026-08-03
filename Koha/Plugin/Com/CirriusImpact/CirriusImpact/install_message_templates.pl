@@ -28,7 +28,8 @@ use Getopt::Long;
 #
 #   --consortia-from-plugin
 #       Same as --consortia-branch for every Koha branch listed in the
-#       plugin Configure → Branches (enabled_branches). Those values are
+#       plugin Configure → Branch services (enabled_branches derived from the
+#       SMS/CIXL/Outbound matrix). Those values are
 #       Koha branchcodes (CPL, UPL, FFL…), not CirriusImpact library IDs
 #       (KDEMO_CPL / KDEMO_UPL).
 #

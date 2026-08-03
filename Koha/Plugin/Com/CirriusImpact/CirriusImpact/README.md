@@ -17,8 +17,8 @@ Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export 
 ## Features (summary)
 
 - CSV export for CirriusImpact (SMS / voice; optional `messageText`)
-- Configure: SFTP connection, SMS/phone enables, branch allowlist
-- Claim / re-claim install token (when provided by CirriusImpact)
+- Configure: **Claim** install token, Connection (SFTP), **Branch services** matrix (SMS / CIXL / Outbound), Type 1 & Type 2 consortia
+- Features: skip ODUE voice when SMS/email exists; include `messageText` in CSV
 - REST callbacks for notice status (`sent` / `inprogress` / `failed`)
 - CLI template installer (`install_message_templates.pl`) — modes: `--defaults`, `--ci-templates`, `--consortia-branch`, `--consortia-from-plugin`
 
