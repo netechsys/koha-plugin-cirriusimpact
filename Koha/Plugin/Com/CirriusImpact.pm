@@ -16,6 +16,7 @@ BEGIN {
 use Modern::Perl;
 use Koha::Database;
 use Koha::Patrons;
+use Koha::Libraries;
 
 use Koha::Biblios;
 use Koha::Items;
@@ -48,14 +49,16 @@ use Try::Tiny;
 use CGI qw(-utf8);
 use YAML::XS qw(Load);
 
-our $VERSION         = "1.2.4";
+# Keep purely numeric segments: Koha's plugin version compare splits on
+# [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
+our $VERSION = "1.3.1";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-06-09',
+    date_updated    => '2026-07-20',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -97,44 +100,676 @@ sub new {
     return $self;
 }
 
+our $default_bootstrap_api_url = 'https://configportal-devel.cgsis.com/koha-bootstrap/v1/claim';
+
 sub configure {
     my ($self, $args) = @_;
     my $cgi = $self->{'cgi'};
 
-    unless ($cgi->param('save')) {
-        my $template = $self->get_template({ file => 'configure.tt' });
-        $template->param(
-            host                               => $self->retrieve_data('host'),
-            username                           => $self->retrieve_data('username'),
-            password                           => $self->retrieve_data('password'),
-            archive_dir                        => $self->retrieve_data('archive_dir') || $default_archive_dir,
-            skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
-            enable_phone                       => $self->retrieve_data('enable_phone'),
-            enable_sms                         => $self->retrieve_data('enable_sms'),
-            enable_email                       => $self->retrieve_data('enable_email'),
-            enable_whatsapp                    => $self->retrieve_data('enable_whatsapp'),
-            include_messagetext                => $self->retrieve_data('include_messagetext'),
-            production_data                    => $self,
-            section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
-        );
-        $self->output_html($template->output());
-    } else {
-        $self->store_data({
+    my $claim_message;
+    my $claim_error;
+
+    if ( $cgi->param('claim') ) {
+        my ( $ok, $msg ) = $self->_ci_claim_bootstrap($cgi);
+        if ($ok) {
+            $claim_message = $msg;
+        } else {
+            $claim_error = $msg;
+        }
+    }
+    elsif ( $cgi->param('save') ) {
+        $self->_ci_ensure_branch_services_migrated;
+        my $consortia_mode = $self->retrieve_data('consortia_mode') // 'shared';
+        my ( $branch_services, $enabled_branches, $branch_to_library, $member_services );
+        if ( $consortia_mode eq 'independent' ) {
+            ( $branch_services, $enabled_branches, $branch_to_library, $member_services )
+              = $self->_ci_type2_services_from_cgi($cgi);
+        }
+        else {
+            ( $branch_services, $enabled_branches ) = $self->_ci_branch_services_from_cgi($cgi);
+        }
+        my $include_messagetext = scalar $cgi->param('include_messagetext');
+        my $any_sms      = $self->_ci_any_branch_service( $branch_services, 'sms' );
+        my $any_outbound = $self->_ci_any_branch_service( $branch_services, 'outbound' );
+        my %save = (
             host                               => scalar $cgi->param('host'),
             username                           => scalar $cgi->param('username'),
             password                           => scalar $cgi->param('password'),
             archive_dir                        => scalar $cgi->param('archive_dir'),
             skip_odue_if_other_if_sms_or_email => scalar $cgi->param('skip_odue_if_other_if_sms_or_email'),
-            enable_phone                       => scalar $cgi->param('enable_phone'),
-            enable_sms                         => scalar $cgi->param('enable_sms'),
-            enable_email                       => scalar $cgi->param('enable_email'),
-            enable_whatsapp                    => scalar $cgi->param('enable_whatsapp'),
-            include_messagetext                => scalar $cgi->param('include_messagetext'),
+            enable_phone                       => $any_outbound ? 1 : 0,
+            enable_sms                         => $any_sms ? 1 : 0,
+            enable_email                       => 0,
+            enable_whatsapp                    => 0,
+            include_messagetext                => $include_messagetext,
             production_data                    => scalar $cgi,
             section_order                      => scalar $cgi->param('section_order') || 'message_type,patron,items,call,sms,message',
-        });
+            enabled_branches                   => $enabled_branches,
+            branch_services                    => $branch_services,
+            bootstrap_api_url                  => scalar $cgi->param('bootstrap_api_url')
+              || $self->retrieve_data('bootstrap_api_url')
+              || $default_bootstrap_api_url,
+            bootstrap_library_id               => scalar $cgi->param('bootstrap_library_id')
+              || $self->retrieve_data('bootstrap_library_id'),
+        );
+        if ( defined $branch_to_library ) {
+            $save{branch_to_library} = $branch_to_library;
+        }
+        if ( defined $member_services ) {
+            $save{member_services} = $member_services;
+        }
+        $self->store_data(\%save);
+        my ( $sync_ok, $sync_msg ) = $self->_ci_sync_branches_to_portal(
+            $enabled_branches, $branch_services, $branch_to_library, $member_services
+        );
+        unless ($sync_ok) {
+            my $template = $self->get_template({ file => 'configure.tt' });
+            $template->param( $self->_ci_configure_template_params(
+                claim_message => 'Settings saved on this Koha server.',
+                claim_error   => $sync_msg,
+            ) );
+            $self->output_html($template->output());
+            return;
+        }
         $self->go_home();
+        return;
     }
+
+    $self->_ci_ensure_branch_services_migrated;
+    my $template = $self->get_template({ file => 'configure.tt' });
+    $template->param( $self->_ci_configure_template_params(
+        claim_message => $claim_message,
+        claim_error   => $claim_error,
+    ) );
+    $self->output_html($template->output());
+}
+
+# POST library_id + token to public bootstrap claim API; apply SFTP + features.
+sub _ci_claim_bootstrap {
+    my ( $self, $cgi ) = @_;
+
+    my $api_url = scalar $cgi->param('bootstrap_api_url');
+    $api_url = $api_url || $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url;
+    $api_url =~ s/^\s+|\s+$//g;
+
+    my $library_id = scalar $cgi->param('bootstrap_library_id');
+    $library_id = $library_id // '';
+    $library_id =~ s/^\s+|\s+$//g;
+
+    my $token = scalar $cgi->param('bootstrap_token');
+    $token = $token // '';
+    $token =~ s/^\s+|\s+$//g;
+
+    return ( 0, 'Bootstrap API URL is required.' ) unless length $api_url;
+    return ( 0, 'Library ID is required.' )         unless length $library_id;
+    return ( 0, 'Install token is required.' )      unless length $token;
+
+    # Persist URL + library id even if claim fails (operator convenience)
+    $self->store_data({
+        bootstrap_api_url    => $api_url,
+        bootstrap_library_id => $library_id,
+    });
+
+    my $payload = encode_json({
+        library_id => $library_id,
+        token      => $token,
+    });
+
+    my ( $code, $body, $err ) = $self->_ci_http_post_json( $api_url, $payload );
+    if ($err) {
+        return ( 0, "Claim request failed: $err" );
+    }
+    if ( !defined $code || $code !~ /^\d+$/ ) {
+        return ( 0, 'Claim request failed: no HTTP status' );
+    }
+    if ( $code == 401 ) {
+        return ( 0, 'Invalid or expired install token.' );
+    }
+    if ( $code == 429 ) {
+        return ( 0, 'Too many claim attempts; try again later.' );
+    }
+    if ( $code < 200 || $code >= 300 ) {
+        my $detail = '';
+        try {
+            my $j = decode_json( $body // '{}' );
+            $detail = $j->{error} if ref($j) eq 'HASH' && $j->{error};
+        } catch { };
+        return ( 0, "Claim failed (HTTP $code)" . ( $detail ? ": $detail" : '' ) );
+    }
+
+    my $data;
+    my $json_err;
+    try {
+        $data = decode_json( $body // '{}' );
+    } catch {
+        $json_err = $_;
+    };
+    return ( 0, 'Claim response was not valid JSON.' )
+      if $json_err || ref($data) ne 'HASH';
+
+    my $host = $data->{host} // '';
+    my $user = $data->{username} // '';
+    return ( 0, 'Claim response missing host or username.' )
+      unless length($host) && length($user);
+
+    my $now = POSIX::strftime( '%Y-%m-%d %H:%M:%S', gmtime() );
+    my $consortia_mode = $data->{consortia_mode} // 'shared';
+    $consortia_mode = 'independent' if $consortia_mode eq 'independent';
+    $consortia_mode = 'shared' unless $consortia_mode eq 'independent';
+    my $include_messagetext = $data->{include_messagetext} ? 1 : 0;
+    my %to_store = (
+        host                 => $host,
+        username             => $user,
+        password             => defined $data->{password} ? $data->{password} : '',
+        enable_sms           => $data->{enable_sms}           ? 1 : 0,
+        enable_phone         => $data->{enable_phone}         ? 1 : 0,
+        enable_email         => 0,
+        enable_whatsapp      => 0,
+        include_messagetext  => $include_messagetext,
+        consortia_mode       => $consortia_mode,
+        bootstrap_api_url    => $api_url,
+        bootstrap_library_id => $data->{library_id} || $library_id,
+        bootstrap_claimed_at => $now,
+    );
+    if ( defined $data->{sync_token} && length $data->{sync_token} ) {
+        $to_store{bootstrap_sync_token} = $data->{sync_token};
+    }
+    if ( exists $data->{enabled_branches} ) {
+        $to_store{enabled_branches} = $data->{enabled_branches} // '';
+    }
+    if ( exists $data->{branch_services} && defined $data->{branch_services} ) {
+        my $bs = $data->{branch_services};
+        if ( ref($bs) eq 'HASH' ) {
+            $to_store{branch_services} = encode_json( $self->_ci_normalize_branch_services($bs) );
+        }
+        elsif ( !ref($bs) && length($bs) ) {
+            try {
+                my $parsed = decode_json($bs);
+                $to_store{branch_services} = encode_json( $self->_ci_normalize_branch_services($parsed) )
+                  if ref($parsed) eq 'HASH';
+            } catch { };
+        }
+    }
+    if ( exists $data->{enable_cixl} ) {
+        $to_store{enable_cixl} = $data->{enable_cixl} ? 1 : 0;
+    }
+    if ( exists $data->{member_catalog} && defined $data->{member_catalog} ) {
+        my $cat = $data->{member_catalog};
+        if ( ref($cat) eq 'ARRAY' ) {
+            $to_store{member_catalog} = encode_json($cat);
+        }
+        elsif ( !ref($cat) && length($cat) ) {
+            $to_store{member_catalog} = $cat;
+        }
+    }
+    if ( exists $data->{branch_to_library} && defined $data->{branch_to_library} ) {
+        my $bm = $data->{branch_to_library};
+        if ( ref($bm) eq 'HASH' ) {
+            $to_store{branch_to_library} = encode_json($bm);
+        }
+        elsif ( !ref($bm) && length($bm) ) {
+            $to_store{branch_to_library} = $bm;
+        }
+    }
+    $self->store_data( \%to_store );
+    $self->_ci_ensure_branch_services_migrated;
+
+    return ( 1, "Claim successful for library '" . ( $data->{library_id} || $library_id ) . "'. Connection and features updated." );
+}
+
+# Push enabled_branches + branch_services (+ Type 2 maps) to Configuration Portal.
+sub _ci_sync_branches_to_portal {
+    my ( $self, $enabled_branches, $branch_services, $branch_to_library, $member_services ) = @_;
+
+    my $library_id = $self->retrieve_data('bootstrap_library_id') // '';
+    my $sync_token = $self->retrieve_data('bootstrap_sync_token') // '';
+    my $api_url    = $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url;
+
+    unless ( length $library_id && length $sync_token ) {
+        return (
+            0,
+            'Branch choices were saved here, but not sent to the Configuration Portal '
+              . '(claim/re-claim first to obtain a sync token).'
+        );
+    }
+
+    my $sync_url = $api_url;
+    $sync_url =~ s{/*\z}{};
+    if ( $sync_url =~ m{/v1/claim\z} ) {
+        $sync_url =~ s{/v1/claim\z}{/v1/sync-branches};
+    }
+    else {
+        $sync_url .= '/v1/sync-branches';
+    }
+
+    my $payload_hash = {
+        library_id       => $library_id,
+        sync_token       => $sync_token,
+        enabled_branches => defined $enabled_branches ? $enabled_branches : '',
+    };
+    if ( defined $branch_services && length $branch_services ) {
+        $payload_hash->{branch_services} = $branch_services;
+    }
+    if ( defined $branch_to_library && length $branch_to_library ) {
+        $payload_hash->{branch_to_library} = $branch_to_library;
+    }
+    if ( defined $member_services && length $member_services ) {
+        $payload_hash->{member_services} = $member_services;
+    }
+    my $payload = encode_json($payload_hash);
+
+    my ( $code, $body, $err ) = $self->_ci_http_post_json( $sync_url, $payload );
+    if ($err) {
+        return ( 0, "Portal branch sync failed: $err" );
+    }
+    if ( !defined $code || $code < 200 || $code >= 300 ) {
+        my $detail = '';
+        try {
+            my $j = decode_json( $body // '{}' );
+            $detail = $j->{error} if ref($j) eq 'HASH' && $j->{error};
+        } catch { };
+        return ( 0, "Portal branch sync failed (HTTP " . ( $code // '?' ) . ")"
+          . ( $detail ? ": $detail" : '' ) );
+    }
+    return ( 1, 'Branch choices synced to Configuration Portal.' );
+}
+
+sub _ci_http_post_json {
+    my ( $self, $url, $json_body ) = @_;
+
+    try {
+        require HTTP::Tiny;
+        my $http = HTTP::Tiny->new(
+            timeout         => 30,
+            verify_SSL      => 1,
+            default_headers => {
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+            },
+        );
+        my $res = $http->request(
+            'POST', $url,
+            { content => $json_body }
+        );
+        return ( $res->{status}, $res->{content}, undef );
+    } catch {
+        my $http_tiny_err = $_;
+        try {
+            require LWP::UserAgent;
+            require HTTP::Request;
+            my $ua = LWP::UserAgent->new( timeout => 30, agent => 'CirriusImpact-Koha-Plugin/1.3' );
+            my $req = HTTP::Request->new( POST => $url );
+            $req->header( 'Content-Type' => 'application/json' );
+            $req->header( 'Accept'       => 'application/json' );
+            $req->content($json_body);
+            my $res = $ua->request($req);
+            return ( $res->code, $res->decoded_content, undef );
+        } catch {
+            return ( undef, undef, "HTTP client unavailable ($http_tiny_err / $_)" );
+        };
+    };
+}
+
+# List Koha libraries for Configure service matrix (branchcode + sms/cixl/outbound).
+# Strict opt-in: new/unknown branches default all services OFF.
+sub _ci_libraries_for_configure {
+    my ($self) = @_;
+    $self->_ci_ensure_branch_services_migrated;
+    my $services = $self->_ci_branch_services;
+
+    my @libraries;
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchname'] } );
+        while ( my $lib = $rs->next ) {
+            my $code = $lib->branchcode // next;
+            my $svc  = $services->{$code} || {};
+            push @libraries, {
+                branchcode => $code,
+                branchname => $lib->branchname // $code,
+                sms        => $svc->{sms}      ? 1 : 0,
+                cixl       => $svc->{cixl}     ? 1 : 0,
+                outbound   => $svc->{outbound} ? 1 : 0,
+                enabled    => ( $svc->{sms} || $svc->{cixl} || $svc->{outbound} ) ? 1 : 0,
+            };
+        }
+    } catch {
+        warn "CirriusImpact: failed to load libraries for configure: $_\n";
+    };
+    return \@libraries;
+}
+
+# Normalize a branch_services hash: CIXL requires SMS; coerce to 0/1.
+sub _ci_normalize_branch_services {
+    my ( $self, $raw ) = @_;
+    return {} unless ref($raw) eq 'HASH';
+    my %out;
+    for my $code ( keys %$raw ) {
+        next unless defined $code && length $code;
+        my $svc = $raw->{$code};
+        next unless ref($svc) eq 'HASH';
+        my $sms      = $svc->{sms}      ? 1 : 0;
+        my $outbound = $svc->{outbound} ? 1 : 0;
+        my $cixl     = ( $sms && $svc->{cixl} ) ? 1 : 0;
+        next unless $sms || $outbound || $cixl;
+        $out{$code} = { sms => $sms, cixl => $cixl, outbound => $outbound };
+    }
+    return \%out;
+}
+
+# Parse stored branch_services JSON into a hashref (may be empty).
+sub _ci_branch_services {
+    my ($self) = @_;
+    my $raw = $self->retrieve_data('branch_services');
+    return {} unless defined $raw && length $raw;
+    my $parsed;
+    try {
+        $parsed = decode_json($raw);
+    } catch {
+        warn "CirriusImpact: invalid branch_services JSON: $_\n";
+    };
+    return {} unless ref($parsed) eq 'HASH';
+    return $self->_ci_normalize_branch_services($parsed);
+}
+
+# True if any branch has the named service enabled.
+sub _ci_any_branch_service {
+    my ( $self, $branch_services_json, $service ) = @_;
+    return 0 unless defined $branch_services_json && length $branch_services_json;
+    my $parsed;
+    try { $parsed = decode_json($branch_services_json); } catch { };
+    return 0 unless ref($parsed) eq 'HASH';
+    for my $svc ( values %$parsed ) {
+        next unless ref($svc) eq 'HASH';
+        return 1 if $svc->{$service};
+    }
+    return 0;
+}
+
+# Derive enabled_branches CSV from a services hash (any service on).
+sub _ci_enabled_branches_from_services {
+    my ( $self, $services ) = @_;
+    return '' unless ref($services) eq 'HASH' && %$services;
+    my @codes = sort grep {
+        my $s = $services->{$_};
+        ref($s) eq 'HASH' && ( $s->{sms} || $s->{cixl} || $s->{outbound} );
+    } keys %$services;
+    return join( ',', @codes );
+}
+
+# Upgrade migration: convert enabled_branches + global enables into branch_services once.
+sub _ci_ensure_branch_services_migrated {
+    my ($self) = @_;
+    my $existing = $self->retrieve_data('branch_services');
+    return if defined $existing && length $existing;
+
+    my $raw = $self->retrieve_data('enabled_branches');
+    my $enable_sms   = $self->retrieve_data('enable_sms')   ? 1 : 0;
+    my $enable_phone = $self->retrieve_data('enable_phone') ? 1 : 0;
+    my $enable_cixl  = $self->retrieve_data('enable_cixl')  ? 1 : 0;
+    $enable_cixl = 0 unless $enable_sms;
+
+    my @codes;
+    my $all_mode = !defined $raw || $raw eq '*';
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchcode'] } );
+        while ( my $lib = $rs->next ) {
+            my $code = $lib->branchcode // next;
+            if ($all_mode) {
+                push @codes, $code;
+            }
+            elsif ( defined $raw && $raw ne '' ) {
+                my %selected = map { $_ => 1 } grep { length } split /\s*,\s*/, $raw;
+                push @codes, $code if $selected{$code};
+            }
+        }
+    } catch { };
+
+    # Fresh install / never configured: empty matrix (strict opt-in).
+    # Legacy '*' or unset with no prior config also yields empty if no services were on.
+    my %matrix;
+    if ( @codes && ( $enable_sms || $enable_phone || $enable_cixl ) ) {
+        for my $code (@codes) {
+            $matrix{$code} = {
+                sms      => $enable_sms,
+                cixl     => ( $enable_sms && $enable_cixl ) ? 1 : 0,
+                outbound => $enable_phone,
+            };
+        }
+    }
+    elsif ( defined $raw && $raw ne '' && $raw ne '*' && @codes ) {
+        # Branches were selected but globals off — keep branches with no services? Skip.
+        # Preserve presence only if at least one global was on; otherwise empty.
+    }
+
+    my $normalized = $self->_ci_normalize_branch_services( \%matrix );
+    my $json       = encode_json($normalized);
+    my $enabled    = $self->_ci_enabled_branches_from_services($normalized);
+    $self->store_data({
+        branch_services  => $json,
+        enabled_branches => $enabled,
+    });
+}
+
+# Read Configure matrix checkboxes into JSON + derived enabled_branches.
+# Inputs: svc_sms_<code>, svc_cixl_<code>, svc_outbound_<code>
+sub _ci_branch_services_from_cgi {
+    my ( $self, $cgi ) = @_;
+    my %matrix;
+
+    my @all_codes;
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchcode'] } );
+        while ( my $lib = $rs->next ) {
+            push @all_codes, $lib->branchcode if $lib->branchcode;
+        }
+    } catch { };
+
+    for my $code (@all_codes) {
+        my $sms      = $cgi->param("svc_sms_$code")      ? 1 : 0;
+        my $cixl     = $cgi->param("svc_cixl_$code")     ? 1 : 0;
+        my $outbound = $cgi->param("svc_outbound_$code") ? 1 : 0;
+        $cixl = 0 unless $sms;
+        next unless $sms || $cixl || $outbound;
+        $matrix{$code} = { sms => $sms, cixl => $cixl, outbound => $outbound };
+    }
+
+    my $normalized = $self->_ci_normalize_branch_services( \%matrix );
+    my $json       = encode_json($normalized);
+    my $enabled    = $self->_ci_enabled_branches_from_services($normalized);
+    return ( $json, $enabled );
+}
+
+sub _ci_member_catalog {
+    my ($self) = @_;
+    my $raw = $self->retrieve_data('member_catalog');
+    return [] unless defined $raw && length $raw;
+    my $parsed;
+    try { $parsed = decode_json($raw); } catch { };
+    return [] unless ref($parsed) eq 'ARRAY';
+    my @out;
+    for my $m (@$parsed) {
+        next unless ref($m) eq 'HASH' && $m->{library_id};
+        my $sms = $m->{entitle_sms} ? 1 : 0;
+        push @out, {
+            library_id       => $m->{library_id},
+            entitle_sms      => $sms,
+            entitle_cixl     => ( $sms && $m->{entitle_cixl} ) ? 1 : 0,
+            entitle_outbound => $m->{entitle_outbound} ? 1 : 0,
+        };
+    }
+    return \@out;
+}
+
+sub _ci_branch_to_library {
+    my ($self) = @_;
+    my $raw = $self->retrieve_data('branch_to_library');
+    return {} unless defined $raw && length $raw;
+    my $parsed;
+    try { $parsed = decode_json($raw); } catch { };
+    return {} unless ref($parsed) eq 'HASH';
+    my %out;
+    for my $k ( keys %$parsed ) {
+        my $v = $parsed->{$k};
+        next unless defined $k && length $k && defined $v && length $v;
+        $out{$k} = "$v";
+    }
+    return \%out;
+}
+
+sub _ci_member_services {
+    my ($self) = @_;
+    my $raw = $self->retrieve_data('member_services');
+    return {} unless defined $raw && length $raw;
+    my $parsed;
+    try { $parsed = decode_json($raw); } catch { };
+    return {} unless ref($parsed) eq 'HASH';
+    my $catalog = { map { $_->{library_id} => $_ } @{ $self->_ci_member_catalog } };
+    my %out;
+    for my $mid ( keys %$parsed ) {
+        my $svc = $parsed->{$mid};
+        next unless ref($svc) eq 'HASH';
+        my $ent = $catalog->{$mid} || {};
+        my $sms = ( $svc->{sms} && $ent->{entitle_sms} ) ? 1 : 0;
+        my $outbound = ( $svc->{outbound} && $ent->{entitle_outbound} ) ? 1 : 0;
+        my $cixl = ( $sms && $svc->{cixl} && $ent->{entitle_cixl} ) ? 1 : 0;
+        $out{$mid} = { sms => $sms, cixl => $cixl, outbound => $outbound };
+    }
+    return \%out;
+}
+
+# Type 2 Configure save: member dropdowns + entitlement-capped member services.
+# Returns (branch_services_json, enabled_branches, branch_to_library_json, member_services_json).
+sub _ci_type2_services_from_cgi {
+    my ( $self, $cgi ) = @_;
+    my $catalog = { map { $_->{library_id} => $_ } @{ $self->_ci_member_catalog } };
+    my %member_services;
+    for my $mid ( keys %$catalog ) {
+        my $ent = $catalog->{$mid};
+        my $sms = ( $cgi->param("mem_sms_$mid") && $ent->{entitle_sms} ) ? 1 : 0;
+        my $outbound = ( $cgi->param("mem_outbound_$mid") && $ent->{entitle_outbound} ) ? 1 : 0;
+        my $cixl = ( $sms && $cgi->param("mem_cixl_$mid") && $ent->{entitle_cixl} ) ? 1 : 0;
+        $member_services{$mid} = { sms => $sms, cixl => $cixl, outbound => $outbound };
+    }
+
+    my %branch_map;
+    my %branch_services;
+    my @all_codes;
+    try {
+        my $rs = Koha::Libraries->search( {}, { order_by => ['branchcode'] } );
+        while ( my $lib = $rs->next ) {
+            push @all_codes, $lib->branchcode if $lib->branchcode;
+        }
+    } catch { };
+
+    for my $code (@all_codes) {
+        my $mid = scalar $cgi->param("branch_member_$code");
+        $mid = defined $mid ? "$mid" : '';
+        $mid =~ s/^\s+|\s+$//g;
+        next unless length $mid;
+        next unless $catalog->{$mid};
+        $branch_map{$code} = $mid;
+        my $ms = $member_services{$mid} || {};
+        next unless $ms->{sms} || $ms->{outbound} || $ms->{cixl};
+        $branch_services{$code} = {
+            sms      => $ms->{sms} ? 1 : 0,
+            cixl     => $ms->{cixl} ? 1 : 0,
+            outbound => $ms->{outbound} ? 1 : 0,
+        };
+    }
+
+    my $normalized = $self->_ci_normalize_branch_services( \%branch_services );
+    return (
+        encode_json($normalized),
+        $self->_ci_enabled_branches_from_services($normalized),
+        encode_json( \%branch_map ),
+        encode_json( \%member_services ),
+    );
+}
+
+sub _ci_configure_template_params {
+    my ( $self, %extra ) = @_;
+    my $consortia_mode = $self->retrieve_data('consortia_mode') // 'shared';
+    my %params = (
+        host                               => $self->retrieve_data('host'),
+        username                           => $self->retrieve_data('username'),
+        password                           => $self->retrieve_data('password'),
+        archive_dir                        => $self->retrieve_data('archive_dir') || $default_archive_dir,
+        skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
+        enable_phone                       => $self->retrieve_data('enable_phone'),
+        enable_sms                         => $self->retrieve_data('enable_sms'),
+        include_messagetext                => $self->retrieve_data('include_messagetext'),
+        consortia_mode                     => $consortia_mode,
+        production_data                    => $self,
+        section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
+        libraries                          => $self->_ci_libraries_for_configure,
+        bootstrap_api_url                  => $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url,
+        bootstrap_library_id               => $self->retrieve_data('bootstrap_library_id'),
+        bootstrap_claimed_at               => $self->retrieve_data('bootstrap_claimed_at'),
+        %extra,
+    );
+    if ( $consortia_mode eq 'independent' ) {
+        my $catalog = $self->_ci_member_catalog;
+        my $ms      = $self->_ci_member_services;
+        my $map     = $self->_ci_branch_to_library;
+        my @members;
+        for my $m (@$catalog) {
+            my $eff = $ms->{ $m->{library_id} } || {};
+            push @members, {
+                %$m,
+                sms      => $eff->{sms} ? 1 : 0,
+                cixl     => $eff->{cixl} ? 1 : 0,
+                outbound => $eff->{outbound} ? 1 : 0,
+            };
+        }
+        $params{member_catalog} = \@members;
+        for my $lib ( @{ $params{libraries} } ) {
+            $lib->{member_library} = $map->{ $lib->{branchcode} } // '';
+        }
+    }
+    return %params;
+}
+
+# Per-branch service check. Default OFF (strict opt-in) once branch_services exists.
+# Legacy fallback: enabled_branches + global enable_sms/enable_phone when matrix absent.
+sub _ci_branch_service_enabled {
+    my ( $self, $branchcode, $service ) = @_;
+    $service = '' unless defined $service;
+    return 0 unless $service eq 'sms' || $service eq 'cixl' || $service eq 'outbound';
+
+    $self->_ci_ensure_branch_services_migrated;
+    my $raw = $self->retrieve_data('branch_services');
+    if ( defined $raw && length $raw ) {
+        return 0 unless defined $branchcode && length $branchcode;
+        my $services = $self->_ci_branch_services;
+        my $svc = $services->{$branchcode} || {};
+        return $svc->{$service} ? 1 : 0;
+    }
+
+    # Legacy path (should be rare after migration).
+    return 0 unless $self->_ci_branch_enabled($branchcode);
+    return $self->retrieve_data('enable_sms')   ? 1 : 0 if $service eq 'sms';
+    return $self->retrieve_data('enable_phone') ? 1 : 0 if $service eq 'outbound';
+    return 0;
+}
+
+# Legacy branch enablement (any service). Prefer _ci_branch_service_enabled for filters.
+sub _ci_branch_enabled {
+    my ( $self, $branchcode ) = @_;
+    $self->_ci_ensure_branch_services_migrated;
+    my $raw_svc = $self->retrieve_data('branch_services');
+    if ( defined $raw_svc && length $raw_svc ) {
+        return 1 if $self->_ci_branch_service_enabled( $branchcode, 'sms' );
+        return 1 if $self->_ci_branch_service_enabled( $branchcode, 'outbound' );
+        return 1 if $self->_ci_branch_service_enabled( $branchcode, 'cixl' );
+        return 0;
+    }
+    my $raw = $self->retrieve_data('enabled_branches');
+    return 1 unless defined $raw;
+    return 1 if $raw eq '*';
+    return 0 if $raw eq '';
+    return 0 unless defined $branchcode && length $branchcode;
+    my %set = map { $_ => 1 } grep { length } split /\s*,\s*/, $raw;
+    return $set{$branchcode} ? 1 : 0;
 }
 
 sub install {
@@ -144,6 +779,7 @@ sub install {
 
 sub upgrade {
     my ($self, $args) = @_;
+    $self->_ci_ensure_branch_services_migrated;
     return $self->_ensure_message_status_values();
 }
 
@@ -477,7 +1113,7 @@ sub _ci_sms_fallback_message {
     $brname ||= 'Your Library';
     $fname  ||= 'Patron';
     $title  ||= 'your item';
-    my $lc = uc($letter_code || '');
+    my $lc = _ci_base_letter_code($letter_code);
 
     if ($lc =~ /^HOLD/) {
         return sprintf(
@@ -515,7 +1151,7 @@ sub _ci_call_fallback_message {
     $brname ||= 'your library';
     $fname  ||= 'Patron';
     $title  ||= 'your item';
-    my $lc = uc($letter_code || '');
+    my $lc = _ci_base_letter_code($letter_code);
 
     if ($lc =~ /^HOLD/) {
         return sprintf(
@@ -597,7 +1233,7 @@ sub _generate_csv_output {
         my $mt = $msg->{message_type} || {};
         my $letter_code = $mt->{letter_code} || '';
         
-        if ($letter_code eq 'HOLDDGST') {
+        if (_ci_base_letter_code($letter_code) eq 'HOLDDGST') {
             $log->info("Processing HOLDDGST message for digest grouping");
             # Debug: show message structure
             $log->info("Message structure keys: " . join(', ', keys %$msg));
@@ -950,20 +1586,21 @@ sub _generate_csv_output {
     # Use grouped messages for CSV generation
     $message_data = \@grouped_message_data;
     
-    # Define the required CSV headers in the exact order requested
-    # messageText conditionally added at the end for message content
+    # CSV_HEADER_5 keeps the existing CSV_HEADER_4 contract intact and adds
+    # CIXLEnabled after messageText. Keep both columns present so positional
+    # processor mapping remains stable when messageText content is disabled.
     my @headers = qw(
         commType language notificationType notificationLevel patronBarCode 
         STAB_userSalutation patronFirstName patronLastName phone email 
         LibraryCode branch branchname itemsID date title DeliveryOptionID LanguageID 
         NotificationTypeID ReportingOrgID PatronID ItemRecordID RequestID 
-        PickupAreaDescription TxnID AccountBalance kohaNotificationType
+        PickupAreaDescription TxnID AccountBalance kohaNotificationType messageText
+        CIXLEnabled
     );
     
-    # Add messageText column if enabled in configuration
-    if ($self->retrieve_data('include_messagetext')) {
-        push @headers, 'messageText';
-    }
+    # Populate messageText only when enabled. Koha renders the correct
+    # branch/library context before export, so this is safe in both modes.
+    my $include_messagetext = $self->retrieve_data('include_messagetext');
     
     my @csv_lines;
     push @csv_lines, join(',', @headers);
@@ -1032,6 +1669,13 @@ sub _generate_csv_output {
         $row_data{date} = $self->_format_date($transport_section->{date} || '');
         $row_data{title} = $transport_section->{title} || '';
         $row_data{DeliveryOptionID} = $transport_section->{DeliveryOptionID} || '';
+        # CIXL short-URL flag for the processor (requires SMS + branch CIXL).
+        $row_data{CIXLEnabled} =
+          ( $transport eq 'sms'
+              && $self->_ci_branch_service_enabled( $row_data{branch}, 'sms' )
+              && $self->_ci_branch_service_enabled( $row_data{branch}, 'cixl' ) )
+          ? 1
+          : 0;
         $row_data{LanguageID} = $transport_section->{LanguageID} || '';
         $row_data{NotificationTypeID} = $transport_section->{NotificationTypeID} || '';
         $row_data{ReportingOrgID} = $transport_section->{ReportingOrgID} || '';
@@ -1048,7 +1692,7 @@ sub _generate_csv_output {
         $row_data{kohaNotificationType} = $letter_code;
         
         # Add message text based on transport type (if enabled in configuration)
-        if ($self->retrieve_data('include_messagetext')) {
+        if ($include_messagetext) {
             my $message_text = '';
             if ($transport eq 'sms') {
                 $message_text = $transport_section->{text} || '';
@@ -1151,9 +1795,77 @@ sub before_send_messages {
         $log->info("FOUND " . scalar @messages . " MESSAGES TO PROCESS");
         last unless @messages;
 
-        unless ($test_mode) { $_->update({ status => 'deleted' }) for @messages; }
-
+        # Filter uses patron home branchcode — same value exported in CSV branch.
+        # SMS transport requires branch sms; phone/outbound requires branch outbound.
+        # sms/phone notices for disabled branch/services must NOT be left pending:
+        # Koha's own send loop would hand them to the SMSSendDriver stub, which
+        # either fails (driver missing) or falsely reports "sent" (stub driver).
+        # Mark them failed with an explicit reason instead. Email is left pending
+        # so Koha can deliver it natively.
+        my @to_process;
+        my @to_fail;
         for my $m (@messages) {
+            my $branchcode = '';
+            try {
+                my $patron = Koha::Patrons->find( $m->borrowernumber );
+                $branchcode = $patron->branchcode // '' if $patron;
+            } catch { };
+            my $transport = lc( $m->message_transport_type // '' );
+            my $service =
+                ( $transport eq 'sms' )   ? 'sms'
+              : ( $transport eq 'phone' ) ? 'outbound'
+              :                             '';
+            my $allowed = 0;
+            if ($service) {
+                $allowed = $self->_ci_branch_service_enabled( $branchcode, $service );
+            }
+            elsif ( $transport eq 'email' || $transport eq 'whatsapp' ) {
+                $allowed = 0;    # not offered
+            }
+            else {
+                # Unknown transport: require any service on the branch
+                $allowed = $self->_ci_branch_enabled($branchcode);
+            }
+            if ($allowed) {
+                push @to_process, $m;
+            }
+            elsif ( $transport eq 'sms' || $transport eq 'phone' ) {
+                push @to_fail, [ $m, $branchcode, $transport ];
+            }
+            else {
+                $log->info(
+                    "Leaving message "
+                      . $m->id
+                      . " pending — home branch '$branchcode' transport '$transport' "
+                      . "not enabled for CirriusImpact"
+                );
+            }
+        }
+
+        unless ($test_mode) {
+            for my $entry (@to_fail) {
+                my ( $m, $branchcode, $transport ) = @$entry;
+                my $reason = "CirriusImpact: branch '$branchcode' not enabled for $transport service";
+                try {
+                    $m->update( { status => 'failed', failure_code => $reason } );
+                } catch {
+                    $m->update( { status => 'failed' } );
+                };
+                $log->info( "Marked message " . $m->id . " failed — $reason" );
+            }
+        }
+
+        if ( !@to_process ) {
+            # Failed messages drop out of the next search, so re-query in case
+            # this page was all disabled-branch notices with more waiting behind.
+            next if @to_fail && !$test_mode;
+            last;
+        }
+        $log->info( "PROCESSING " . scalar(@to_process) . " MESSAGES AFTER BRANCH FILTER" );
+
+        unless ($test_mode) { $_->update({ status => 'deleted' }) for @to_process; }
+
+        for my $m (@to_process) {
             $log->info("WORKING ON MESSAGE " . $m->id);
             my $content = $m->content // '';
 
@@ -1782,41 +2494,68 @@ sub _odue_codes {
     return \@codes;
 }
 
+# Stock codes plus CODE-CI variants from install_message_templates.pl --ci-templates
+sub _with_ci_letter_variants {
+    my (@codes) = @_;
+    my @out;
+    my %seen;
+    for my $c (@codes) {
+        next unless defined $c && length $c;
+        for my $v ( $c, "$c-CI" ) {
+            next if $seen{$v}++;
+            push @out, $v;
+        }
+    }
+    return \@out;
+}
+
+# CHECKOUT-CI / HOLD-CI → CHECKOUT / HOLD for mapping and fallbacks
+sub _ci_base_letter_code {
+    my ($letter_code) = @_;
+    my $lc = uc( $letter_code // '' );
+    $lc =~ s/-CI\z//;
+    return $lc;
+}
+
 sub _hold_codes {
     # Return common hold-related letter codes that should be processed
-    return ['HOLD', 'HOLDDGST', 'HOLDPLACED', 'HOLDPLACED_PATRON', 'HOLD_CHANGED', 'HOLD_REMINDER',
-            'HOLD_CHANGEDGST', 'HOLD_REMINDERGST', 'HOLDPLACEDGST', 'HOLDPLACED_PATRONGST',
-            'HOLD_SLIP'];
+    return _with_ci_letter_variants(
+        'HOLD',             'HOLDDGST',         'HOLDPLACED',
+        'HOLDPLACED_PATRON', 'HOLD_CHANGED',     'HOLD_REMINDER',
+        'HOLD_CHANGEDGST',  'HOLD_REMINDERGST',  'HOLDPLACEDGST',
+        'HOLDPLACED_PATRONGST', 'HOLD_SLIP'
+    );
 }
 
 sub _predue_codes {
     # Return pre-due notice letter codes that should be processed
-    return ['PREDUE', 'PREDUEDGST'];
+    return _with_ci_letter_variants( 'PREDUE', 'PREDUEDGST' );
 }
 
 sub _circulation_codes {
     # Return circulation-related letter codes (item checkout/checkin) that should be processed
-    return ['CHECKOUT', 'CHECKIN'];
+    return _with_ci_letter_variants( 'CHECKOUT', 'CHECKIN' );
 }
 
 sub _renewal_codes {
     # Return renewal-related letter codes that should be processed
-    return ['RENEWAL', 'AUTO_RENEWALS', 'AUTO_RENEWALS_DGST'];
+    return _with_ci_letter_variants( 'RENEWAL', 'AUTO_RENEWALS', 'AUTO_RENEWALS_DGST' );
 }
 
 sub _membership_codes {
     # Return membership/account-related letter codes that should be processed
     # (account expiring/renewed/welcome notifications)
-    return ['MEMBERSHIP_EXPIRY', 'MEMBERSHIP_RENEWED', 'WELCOME'];
+    return _with_ci_letter_variants( 'MEMBERSHIP_EXPIRY', 'MEMBERSHIP_RENEWED', 'WELCOME' );
 }
 
 sub _get_notification_type_and_level {
-    my ($self, $letter_code) = @_;
-    
+    my ( $self, $letter_code ) = @_;
+
     # Load notification mapping from configurable YAML file
     my $mapping = $self->_load_notification_mapping();
-    
-    return $mapping->{$letter_code} || { type => 0, level => 0 };
+    my $lc      = _ci_base_letter_code($letter_code);
+
+    return $mapping->{$lc} || $mapping->{$letter_code} || { type => 0, level => 0 };
 }
 
 # Format date to %d/%m/%Y format
@@ -2594,8 +3333,8 @@ sub _ci_backfill_checkout_identifiers {
         
         $log->info("_ci_backfill_checkout_identifiers: section=$section_name, letter=$letter");
         
-        # Only work with CHECKOUT notices
-        next unless (($letter||'') eq 'CHECKOUT');
+        # Only work with CHECKOUT notices (including CHECKOUT-CI)
+        next unless (_ci_base_letter_code($letter||'') eq 'CHECKOUT');
 
     my $has_all = sub {
         my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
@@ -2725,8 +3464,8 @@ sub _ci_backfill_checkin_identifiers {
         
         $log->info("_ci_backfill_checkin_identifiers: section=$section_name, letter=$letter");
         
-        # Only work with CHECKIN notices
-        next unless (($letter||'') eq 'CHECKIN');
+        # Only work with CHECKIN notices (including CHECKIN-CI)
+        next unless (_ci_base_letter_code($letter||'') eq 'CHECKIN');
 
     my $has_all = sub {
         my $result = ($section->{itemsID} && $section->{biblionumber} && $section->{title});
@@ -3377,6 +4116,7 @@ sub _ci_backfill_additional_identifiers {
         
         # Get letter code from the section
         my $letter = $section->{meta} && $section->{meta}->{letter_code} ? $section->{meta}->{letter_code} : ($data->{meta} && $data->{meta}->{letter_code} || '');
+        $letter = _ci_base_letter_code($letter);
         
         $log->info("_ci_backfill_additional_identifiers: section=$section_name, letter=$letter");
         

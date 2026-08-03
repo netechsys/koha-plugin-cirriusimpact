@@ -23,6 +23,21 @@ use File::Spec;
 use File::Basename;
 use Cwd qw(abs_path);
 
+# install_sms_driver.pl installs the drivers under <pluginsdir>/SMS/Send.
+# Koha puts <pluginsdir> in @INC at runtime, but a standalone run of this
+# script does not, so add the plugins root (dir containing Koha/Plugin)
+# ourselves before the driver checks.
+BEGIN {
+    my $dir = dirname( abs_path(__FILE__) );
+    for ( 1 .. 6 ) {
+        $dir = dirname($dir);
+        if ( -d "$dir/Koha/Plugin" ) {
+            unshift @INC, $dir;
+            last;
+        }
+    }
+}
+
 # ANSI color codes for output
 my $GREEN = "\033[0;32m";
 my $RED = "\033[0;31m";
@@ -208,7 +223,18 @@ sub check_plugin_files {
     # Get current script directory
     my $script_path = abs_path(__FILE__);
     my $script_dir = dirname($script_path);
-    my $plugin_dir = dirname($script_dir);  # Parent directory has CirriusImpact.pm
+
+    # Walk up from the script dir to find the directory holding the main
+    # plugin module (layout may nest resources one or two levels deep).
+    my $plugin_dir = dirname($script_dir);
+    my $probe = $script_dir;
+    for ( 1 .. 5 ) {
+        $probe = dirname($probe);
+        if ( -f File::Spec->catfile( $probe, 'CirriusImpact.pm' ) ) {
+            $plugin_dir = $probe;
+            last;
+        }
+    }
     
     # Files to check with their locations
     my @required_files = (

@@ -1,34 +1,46 @@
-# koha-plugin-cirriusimpact
+# CirriusImpact Koha plugin
 
-CirriusImpact Koha plugin — exports patron notices to CSV for the CirriusImpact SMS/Voice service (shared with Koha / ByWater).
+Exports Koha patron notices for CirriusImpact SMS and voice delivery.
 
-**Repository:** https://github.com/netechsys/koha-plugin-cirriusimpact
+**Private GitLab (current releases):** https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact  
+**Public GitHub (mirror):** https://github.com/netechsys/koha-plugin-cirriusimpact
 
-**Latest install package (v1.2.4):** [Download koha-plugin-cirriusimpact-v1.2.4.kpz](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/download/v1.2.4/koha-plugin-cirriusimpact-v1.2.4.kpz) — or open [Releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/latest) and download from **Assets**.
+## Install packages
 
-## Support and troubleshooting
+| Channel | Version | Package |
+|---------|---------|---------|
+| **Production (stable)** | **v1.3.1** | [koha-plugin-cirriusimpact-v1.3.1.kpz](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.3.1) |
+| Previous | v1.2.4 | See [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) |
 
-| Resource | Link |
-|---|---|
-| **Issues** | https://github.com/netechsys/koha-plugin-cirriusimpact/issues |
-| **Discussions** | https://github.com/netechsys/koha-plugin-cirriusimpact/discussions |
-| **Wiki** | https://github.com/netechsys/koha-plugin-cirriusimpact/wiki |
-| **Releases / .kpz** | https://github.com/netechsys/koha-plugin-cirriusimpact/releases |
-| **Contributing** | [CONTRIBUTING.md](CONTRIBUTING.md) |
+Use **v1.3.1** for production Koha sites unless CirriusImpact specifies another build.
 
-The repository is **public** — anyone can read source, open issues, and participate in discussions.
+## Documentation
 
-## Build install package
+| Doc | Purpose |
+|-----|---------|
+| [QUICKSTART.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/QUICKSTART.md) | Fast path after KPZ install |
+| [INSTALL.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/INSTALL.md) | Install and configure |
+| [TEMPLATE_I18N.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/TEMPLATE_I18N.md) | Notice template installer (CLI) |
+| [NOTIFICATION_TYPES.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/NOTIFICATION_TYPES.md) | Supported notice types |
+| [CHANGELOG.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/CHANGELOG.md) | Version history |
+| [SECURITY.md](SECURITY.md) | Security reporting |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributions |
+
+## Build
 
 ```bash
 python3 scripts/build_kpz.py
 ```
 
-Produces `koha-plugin-cirriusimpact-v{VERSION}.kpz` at the repo root (version from `Koha/Plugin/Com/CirriusImpact.pm`).
+Produces `koha-plugin-cirriusimpact-v{VERSION}.kpz` (version from `Koha/Plugin/Com/CirriusImpact.pm`).
 
 ## Install on Koha
 
-1. **Koha Administration → Plugins → Upload** the `.kpz`, or extract under the instance plugins directory.
-2. Reload: `sudo koha-shell <instance> -c "perl -MKoha::Plugin -e 'Koha::Plugins->reload'"`
+1. **Koha Administration → Plugins → Upload** the `.kpz`
+2. Configure SFTP connection (or use Claim when CirriusImpact provides an install token)
+3. Optionally run `install_message_templates.pl` via `koha-shell` (see TEMPLATE_I18N.md)
 
-See `Koha/Plugin/Com/CirriusImpact/CirriusImpact/INSTALL.md` and `QUICKSTART.md`.
+## Support
+
+- Releases (GitLab): https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases
+- Public issues (GitHub mirror): https://github.com/netechsys/koha-plugin-cirriusimpact/issues

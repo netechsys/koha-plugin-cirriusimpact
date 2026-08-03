@@ -21,7 +21,7 @@ The CirriusImpact plugin integrates Koha's messaging system with CirriusImpact's
 
 ### 1. Install the Plugin
 
-1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` file from the [GitHub releases page](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+1. Download the latest `koha-plugin-cirriusimpact-v{VERSION}.kpz` from the [GitLab releases page](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (CirriusImpact may also provide the package directly)
 2. In Koha, go to: **Tools > Plugins > Upload Plugin**
 3. Upload the `.kpz` file
 4. The plugin will automatically install, including the SMS::Send drivers
@@ -64,6 +64,19 @@ sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
 ```
 
+#### Install modes (pick one)
+
+| Mode | What it writes | When to use |
+|------|----------------|-------------|
+| `--defaults` (default) | Stock letter `CODE` at `branchcode=''` | Single-library sites |
+| `--ci-templates` | `CODE-CI` only (`CHECKOUT-CI`, `HOLD-CI`, …); stock left alone | CI members use alternate letter codes |
+| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped `letter.branchcode` | Consortia; Koha prefers branch templates |
+| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch in Configure → Branches | Consortia after branches are enabled |
+
+**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Plugin Configure → Branches values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
+
+The plugin export path recognizes both stock codes and `*-CI` variants.
+
 #### What gets installed
 
 - **19 notice codes** × **2 transports** (SMS + phone) when both services are selected
@@ -75,6 +88,7 @@ sudo koha-shell INSTANCE -c \
 
 | Option | Description | Default |
 |--------|-------------|---------|
+| `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install mode (see above) | `--defaults` if none given |
 | `--services=sms,phone` | Which transports to install (`sms` and/or `phone`) | both |
 | `--default-language=…` | Language content for Koha's Default tab | `en` |
 | `--languages=…` | Which `letter.lang` rows to write | `default,en,es-ES,fr-CA` |
@@ -88,11 +102,32 @@ sudo koha-shell INSTANCE -c \
 
 #### Install examples
 
-**Full install** (SMS + phone, all languages, English Default tab):
+**Single library** (stock defaults, SMS + phone, all languages):
 
 ```bash
 sudo koha-shell INSTANCE -c \
-  'perl .../install_message_templates.pl --no-restart'
+  'perl .../install_message_templates.pl --defaults --no-restart'
+```
+
+**Consortia** (branch-scoped from plugin Configure → Branches):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --consortia-from-plugin --no-restart'
+```
+
+**Consortia** (explicit branches):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --no-restart'
+```
+
+**CODE-CI only** (leave stock letters alone):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --ci-templates --no-restart'
 ```
 
 **SMS only** (library does not use voice):

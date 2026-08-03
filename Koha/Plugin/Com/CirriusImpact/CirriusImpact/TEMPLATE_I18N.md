@@ -1,5 +1,16 @@
 # CirriusImpact Koha notices — multilingual install
 
+## Install modes
+
+| Mode | Writes | Typical use |
+|------|--------|-------------|
+| `--defaults` | Stock `CODE` at `branchcode=''` | Single library (default if no mode given) |
+| `--ci-templates` | `CODE-CI` only; stock untouched | Alternate letter codes for CI members |
+| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped rows | Consortia |
+| `--consortia-from-plugin` | Same for Configure → Branches | Consortia after branch enable |
+
+`--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, not `CHECKOUT-CPL`. The plugin also exports `*-CI` letter codes.
+
 ## Languages
 
 | Koha `letter.lang` | Meaning | CirriusImpact CSV `language` |
@@ -13,7 +24,14 @@ Install (all four rows by default; Default tab filled from English):
 
 ```bash
 sudo koha-shell <instance> -c \
-  'perl /path/to/CirriusImpact/install_message_templates.pl --no-restart'
+  'perl /path/to/CirriusImpact/install_message_templates.pl --defaults --no-restart'
+```
+
+Consortia from plugin branches:
+
+```bash
+sudo koha-shell <instance> -c \
+  'perl /path/to/CirriusImpact/install_message_templates.pl --consortia-from-plugin --no-restart'
 ```
 
 Spanish-primary library (Default tab = Spanish; still installs `en`, `es-ES`, `fr-CA`):

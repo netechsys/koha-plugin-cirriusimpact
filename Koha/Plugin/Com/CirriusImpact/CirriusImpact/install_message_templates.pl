@@ -6,22 +6,49 @@ use DBI;
 use Getopt::Long;
 
 # CirriusImpact Message Template Installer (multilingual)
-# Installs CirriusImpact YAML notices for:
-#   default  = Koha "Default" tab (content from --default-language)
-#   en       = English  (GSM-7-safe ASCII for SMS bodies)
-#   es-ES    = Spanish  (GSM-7-safe ASCII for SMS bodies)
-#   fr-CA    = French   (GSM-7-safe ASCII for SMS bodies)
 #
-# SMS wording avoids accents so carriers stay on GSM-7 (~160 chars/segment)
-# instead of UCS-2 (~70 chars/segment). Titles still expand at send time.
+# Install modes (pick one or combine):
+#   --defaults
+#       Update system-default letters (letter.branchcode = '').
+#       Backward-compatible default when no install mode is given.
 #
-# Usage:
-#   perl install_message_templates.pl
-#   perl install_message_templates.pl --default-language=spa
-#   perl install_message_templates.pl --services=sms
-#   perl install_message_templates.pl --services=phone --default-language=es-ES
-#   perl install_message_templates.pl --services=sms,phone --languages=default,en,es-ES,fr-CA
-#   perl install_message_templates.pl --languages=es-ES --no-restart
+#   --ci-templates
+#       Create/update CODE-CI letters (CHECKOUT-CI, HOLD-CI, ...).
+#       Leaves stock CODE defaults alone. Point member messaging /
+#       overdue rules at the -CI codes for CI members only.
+#
+#   --consortia-branch=CODE
+#       Create/update CI content for that Koha branchcode (same letter CODE,
+#       branch-specific letter row). Repeatable / comma-separated.
+#       Example: --consortia-branch=CPL,UPL
+#       Creates letter rows like CHECKOUT with branchcode=CPL and UPL —
+#       NOT letter codes named CHECKOUT-CPL or CHECKOUT-KDEMO_CPL.
+#       Recommended for consortia: leave defaults alone; CI members
+#       get branch-scoped templates Koha already prefers by library.
+#
+#   --consortia-from-plugin
+#       Same as --consortia-branch for every Koha branch listed in the
+#       plugin Configure → Branches (enabled_branches). Those values are
+#       Koha branchcodes (CPL, UPL, FFL…), not CirriusImpact library IDs
+#       (KDEMO_CPL / KDEMO_UPL).
+#
+# Recommendation:
+#   Single library:           --defaults
+#   Consortia (usual):        --consortia-branch=CPL --consortia-branch=UPL
+#                             or --consortia-from-plugin
+#   Alternate letter codes:   --ci-templates  (then assign *-CI in Koha)
+#
+# Other options:
+#   --default-language=en|es-ES|fr-CA|eng|spa|fre
+#   --services=sms,phone   (alias: --transports)
+#   --languages=default,en,es-ES,fr-CA
+#   --no-restart
+#
+# Examples:
+#   perl install_message_templates.pl --defaults
+#   perl install_message_templates.pl --ci-templates --services=sms
+#   perl install_message_templates.pl --consortia-branch=CPL,UPL
+#   perl install_message_templates.pl --consortia-from-plugin --no-restart
 
 print "CirriusImpact Message Template Installer (multilingual)\n";
 print "========================================================\n\n";
@@ -31,13 +58,42 @@ my @want_services = ('sms', 'phone');  # Koha message_transport_type
 my $no_restart = 0;
 my $default_language_opt = 'en';
 my $services_opt;
+my $do_defaults = 0;
+my $do_ci_templates = 0;
+my $do_from_plugin = 0;
+my @consortia_branch_opts;
+
 GetOptions(
-    'languages=s'         => \my $lang_opt,
-    'default-language=s'  => \$default_language_opt,
-    'services=s'          => \$services_opt,
-    'transports=s'        => \$services_opt,  # alias
-    'no-restart'          => \$no_restart,
-) or die "Usage: $0 [--default-language=en|es-ES|fr-CA|eng|spa|fre] [--services=sms,phone] [--languages=default,en,es-ES,fr-CA] [--no-restart]\n";
+    'languages=s'              => \my $lang_opt,
+    'default-language=s'       => \$default_language_opt,
+    'services=s'               => \$services_opt,
+    'transports=s'             => \$services_opt,  # alias
+    'defaults!'                => \$do_defaults,
+    'ci-templates!'            => \$do_ci_templates,
+    'consortia-branch=s'       => \@consortia_branch_opts,
+    'consortia-from-plugin!'   => \$do_from_plugin,
+    'no-restart'               => \$no_restart,
+) or die usage_die();
+
+sub usage_die {
+    return <<"EOF";
+Usage: $0 [install mode...] [options]
+
+Install modes:
+  --defaults                 System-default letters (branchcode='')
+  --ci-templates             CODE-CI letters; leave stock CODE alone
+  --consortia-branch=CODE    Branch-scoped letters (repeatable / CSV)
+  --consortia-from-plugin    Branches from plugin enabled_branches
+
+If no install mode is given, --defaults is assumed.
+
+Options:
+  --default-language=en|es-ES|fr-CA|eng|spa|fre
+  --services=sms,phone
+  --languages=default,en,es-ES,fr-CA
+  --no-restart
+EOF
+}
 
 # Map checklist / IETF aliases to content keys (en, es-ES, fr-CA)
 my %default_lang_aliases = (
@@ -70,6 +126,7 @@ my %service_aliases = (
     phone => 'phone',
     voice => 'phone',
     call  => 'phone',
+    email => 'email',
 );
 if (defined $services_opt && $services_opt =~ /\S/) {
     my @raw = map { lc(s/^\s+|\s+$//gr) } split /,/, $services_opt;
@@ -77,13 +134,23 @@ if (defined $services_opt && $services_opt =~ /\S/) {
     my %seen;
     for my $s (@raw) {
         my $t = $service_aliases{$s};
-        die "Unknown --services entry '$s' (use sms and/or phone; aliases: text, voice, call)\n"
+        die "Unknown --services entry '$s' (use sms, phone, and/or email)\n"
             unless defined $t;
         next if $seen{$t}++;
         push @resolved, $t;
     }
-    die "--services must include at least one of: sms, phone\n" unless @resolved;
+    die "--services must include at least one of: sms, phone, email\n" unless @resolved;
     @want_services = @resolved;
+}
+
+# Expand consortia branch args (repeatable + comma-separated)
+my @consortia_branches;
+for my $raw (@consortia_branch_opts) {
+    for my $b (split /,/, $raw) {
+        $b =~ s/^\s+|\s+$//g;
+        next unless length $b;
+        push @consortia_branches, $b;
+    }
 }
 
 # Try to use Koha modules first, fall back to direct connection
@@ -105,7 +172,6 @@ unless ($koha_available) {
     print "🔍 Attempting direct database connection...\n";
     my $koha_conf = $ENV{KOHA_CONF} || '/etc/koha/sites/library/koha-conf.xml';
     unless (-f $koha_conf) {
-        # common lab path
         $koha_conf = '/etc/koha/sites/kohalab/koha-conf.xml' if -f '/etc/koha/sites/kohalab/koha-conf.xml';
     }
     unless (-f $koha_conf) {
@@ -140,12 +206,94 @@ unless ($koha_available) {
     }
 }
 
+sub plugin_enabled_branches {
+    my ($dbh) = @_;
+    my @codes;
+
+    # Preferred: plugin retrieve_data (values are encrypted at rest).
+    if ($koha_available) {
+        eval {
+            require Koha::Plugin::Com::CirriusImpact;
+            my $plugin = Koha::Plugin::Com::CirriusImpact->new;
+            my $raw = $plugin->retrieve_data('enabled_branches');
+            if (defined $raw) {
+                $raw =~ s/^\s+|\s+$//g;
+                if ($raw ne '' && $raw ne '*') {
+                    for my $b (split /,/, $raw) {
+                        $b =~ s/^\s+|\s+$//g;
+                        push @codes, $b if length $b;
+                    }
+                }
+            }
+        };
+        if ($@) {
+            print "⚠️  Could not read enabled_branches via plugin API: $@\n";
+        } else {
+            return @codes;
+        }
+    }
+
+    # Fallback: raw plugin_data (only works if value is plaintext — usually is not).
+    my $sth = $dbh->prepare(q{
+        SELECT plugin_value FROM plugin_data
+        WHERE plugin_key = 'enabled_branches'
+          AND plugin_class LIKE '%CirriusImpact%'
+        ORDER BY plugin_class
+        LIMIT 1
+    });
+    eval { $sth->execute(); };
+    if ($@) {
+        print "⚠️  Could not read plugin_data.enabled_branches: $@\n";
+        return @codes;
+    }
+    my ($raw) = $sth->fetchrow_array;
+    $sth->finish();
+    return @codes unless defined $raw;
+    $raw =~ s/^\s+|\s+$//g;
+    # Encrypted blobs start like Salted__ / hex — ignore those here.
+    if ($raw =~ /^53616c7465645f5f/ || $raw =~ /^Salted__/ || $raw =~ /[^A-Za-z0-9_,\-\s\*]/) {
+        print "⚠️  enabled_branches looks encrypted; run installer with Koha modules so --consortia-from-plugin can decrypt it.\n";
+        return @codes;
+    }
+    return @codes if $raw eq '' || $raw eq '*';
+    for my $b (split /,/, $raw) {
+        $b =~ s/^\s+|\s+$//g;
+        push @codes, $b if length $b;
+    }
+    return @codes;
+}
+
+if ($do_from_plugin) {
+    my @from_plugin = plugin_enabled_branches($dbh);
+    if (@from_plugin) {
+        print "Plugin enabled_branches: " . join(', ', @from_plugin) . "\n";
+        push @consortia_branches, @from_plugin;
+    } else {
+        print "⚠️  --consortia-from-plugin: no concrete branches in enabled_branches (unset/*/empty).\n";
+    }
+}
+
+# Dedupe branches (preserve order)
+{
+    my %seen;
+    @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
+}
+
+# Backward compatible: no mode flags => --defaults
+unless ($do_defaults || $do_ci_templates || @consortia_branches) {
+    $do_defaults = 1;
+    print "No install mode given; assuming --defaults\n";
+}
+
 print "Default letter.lang content: $default_content_key (--default-language=$default_language_opt)\n";
 print "Services to install: " . join(', ', @want_services) . "\n";
-print "Languages to install: " . join(', ', @want_langs) . "\n\n";
+print "Languages to install: " . join(', ', @want_langs) . "\n";
+print "Modes:";
+print " --defaults" if $do_defaults;
+print " --ci-templates" if $do_ci_templates;
+print " --consortia-branch=" . join(',', @consortia_branches) if @consortia_branches;
+print "\n\n";
 
-# Each template: module/code/transport + content hash keyed by en|es-ES|fr-CA
-# (letter.lang=default is filled from --default-language at install time)
 my %templates = (
     'HOLD_SMS' => {
         module => 'reserves',
@@ -192,7 +340,7 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -225,7 +373,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]Hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]."
+  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %][% holds.size %] holds ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]Hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]."
 ---
 },
         'es-ES' => q{
@@ -256,7 +404,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have [% IF holds && holds.size > 1 %][% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]One item ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -318,7 +466,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF checkouts.size > 1 %]You checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]You checked out [% biblio.title %] due [% checkout.date_due | $KohaDates %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF checkouts.size > 1 %]You checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]You checked out [% biblio.title %] due [% checkout.date_due | $KohaDates %][% END %]. Thank you!"
 ---
 },
         'es-ES' => q{
@@ -380,7 +528,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. The following item was checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following item was checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you!"
 ---
 },
         'es-ES' => q{
@@ -442,7 +590,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have an overdue item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -473,7 +621,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Second notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Second notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -504,7 +652,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your second notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have a seriously overdue item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return at your earliest convenience to avoid any additional fines. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -535,7 +683,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Final notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Final notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return to avoid additional charges. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -566,7 +714,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. This is your final notice. You have an overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew immediately to avoid additional charges. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is the final overdue notice for item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return or renew at your earliest convenience to avoid any additional charges. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -597,7 +745,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -628,7 +776,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -659,7 +807,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -690,7 +838,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -752,7 +900,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold status has changed for [% biblio.title %]. Please check your account for details. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There has been a hold status change for [% biblio.title %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -783,7 +931,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Reminder - hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -814,7 +962,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder - You have a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that a hold for [% biblio.title %] is ready for pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -876,7 +1024,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Hold placed on [% biblio.title %]. You will be notified when ready for pickup. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There is a hold placed for [% biblio.title %]. You will be notified when it is ready. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -938,7 +1086,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Hold confirmed for [% biblio.title %]. You will be notified when ready for pickup. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There is a hold placed for [% biblio.title %]. You will be notified when it is ready. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1034,7 +1182,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% biblio.title %] has been renewed. The new due date is [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1096,7 +1244,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been auto-renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% biblio.title %] has been auto renewed. The new due date is [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1127,7 +1275,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items auto-renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items auto renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %] auto-renewed[% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1158,7 +1306,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items have been auto-renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items have auto renewed. Please check your account for details[% ELSE %][% biblio.title %] has been auto renewed. The new due date is [% issue.date_due | $KohaDates %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1189,7 +1337,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1220,7 +1368,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Your membership is set to expire on [% borrower.dateexpiry | $KohaDates %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1251,7 +1399,7 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: Your library membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
+  text: "[% branch.branchcode %]: Membership renewed. New expiry: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
 ---
 },
         'es-ES' => q{
@@ -1282,7 +1430,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your library membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Your membership has auto renewed. The new expiration date is [% borrower.dateexpiry | $KohaDates %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1344,7 +1492,7 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Welcome to the library! Your membership is now active. We look forward to serving you. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Welcome to our library. Your membership is active. Please check your account for details. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
@@ -1374,50 +1522,56 @@ sub content_for_lang {
     return $template->{content}{$key};
 }
 
+# Install one letter row.
+# $code_override: undef = template code; 'CI' suffix mode uses CODE-CI
+# $branchcode: '' for defaults, or library branchcode for consortia rows
 sub install_template {
-    my ($name, $template, $lang) = @_;
+    my ($name, $template, $lang, $code_override, $branchcode) = @_;
+    $branchcode = '' unless defined $branchcode;
     my $content = content_for_lang($template, $lang);
     unless (defined $content && $content =~ /\S/) {
         print "Skipping $name ($lang) — no content\n";
         return 0;
     }
 
+    my $code = defined $code_override ? $code_override : $template->{code};
     my $src = ($lang eq 'default') ? "default<-$default_content_key" : $lang;
-    print "Installing $name [$src]... ";
+    my $branch_label = length($branchcode) ? "branch=$branchcode" : "branch=DEFAULT";
+    print "Installing $name code=$code [$src] ($branch_label)... ";
 
     my $check_sth = $dbh->prepare(q{
         SELECT COUNT(*) FROM letter
         WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
-          AND branchcode = ''
+          AND branchcode = ?
     });
-    $check_sth->execute($template->{module}, $template->{code}, $template->{transport}, $lang);
+    $check_sth->execute($template->{module}, $code, $template->{transport}, $lang, $branchcode);
     my ($exists) = $check_sth->fetchrow_array;
     $check_sth->finish();
 
-    my $title = "$template->{code} - $template->{transport}";
-    my $template_name = $template->{code};
+    my $title = "$code - $template->{transport}";
+    my $template_name = $code;
 
     if ($exists) {
         my $update_sth = $dbh->prepare(q{
             UPDATE letter
-            SET content = ?, name = ?, title = ?, branchcode = ''
+            SET content = ?, name = ?, title = ?
             WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
-              AND branchcode = ''
+              AND branchcode = ?
         });
         $update_sth->execute(
             $content, $template_name, $title,
-            $template->{module}, $template->{code}, $template->{transport}, $lang
+            $template->{module}, $code, $template->{transport}, $lang, $branchcode
         );
         $update_sth->finish();
         print "updated.\n";
     } else {
         my $insert_sth = $dbh->prepare(q{
             INSERT INTO letter (module, code, message_transport_type, content, title, name, branchcode, lang)
-            VALUES (?, ?, ?, ?, ?, ?, '', ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         });
         $insert_sth->execute(
-            $template->{module}, $template->{code}, $template->{transport},
-            $content, $title, $template_name, $lang
+            $template->{module}, $code, $template->{transport},
+            $content, $title, $template_name, $branchcode, $lang
         );
         $insert_sth->finish();
         print "installed.\n";
@@ -1428,6 +1582,20 @@ sub install_template {
 print "Installing message templates...\n\n";
 my %want_service = map { $_ => 1 } @want_services;
 my $count = 0;
+
+# Build install targets: list of [code_override_or_undef, branchcode]
+my @targets;
+if ($do_defaults) {
+    push @targets, [undef, ''];
+}
+if ($do_ci_templates) {
+    # CODE-CI at system default branchcode
+    push @targets, ['__CI__', ''];
+}
+for my $b (@consortia_branches) {
+    push @targets, [undef, $b];
+}
+
 for my $lang (@want_langs) {
     print "---- Language: $lang ----\n";
     for my $name (sort keys %templates) {
@@ -1435,7 +1603,14 @@ for my $lang (@want_langs) {
         unless ($want_service{ $tpl->{transport} }) {
             next;
         }
-        $count += install_template($name, $tpl, $lang);
+        for my $t (@targets) {
+            my ($code_mode, $branch) = @$t;
+            my $code_override;
+            if (defined $code_mode && $code_mode eq '__CI__') {
+                $code_override = $tpl->{code} . '-CI';
+            }
+            $count += install_template($name, $tpl, $lang, $code_override, $branch);
+        }
     }
     print "\n";
 }
@@ -1444,12 +1619,17 @@ print "=" x 50, "\n";
 print "Installation complete!\n";
 print "Installed/Updated $count template rows\n";
 print "  services:  @want_services\n";
-print "  languages: @want_langs\n\n";
+print "  languages: @want_langs\n";
+print "  defaults:  ", ($do_defaults ? 'yes' : 'no'), "\n";
+print "  ci-templates (-CI codes): ", ($do_ci_templates ? 'yes' : 'no'), "\n";
+print "  consortia branches: ", (@consortia_branches ? join(', ', @consortia_branches) : '(none)'), "\n\n";
 print "Notes:\n";
 print "- letter.lang=default content came from $default_content_key.\n";
+print "- --defaults overwrites stock CODE letters (branchcode='').\n";
+print "- --ci-templates creates CODE-CI and does not touch stock CODE.\n";
+print "- --consortia-branch installs CI content for that library only; stock defaults stay intact.\n";
 print "- Enable TranslateNotices; add en / es-ES / fr-CA under OPACLanguages for language tabs.\n";
-print "- SMS text is GSM-7-safe (ASCII) so segments stay ~160 chars; accents would drop to ~70.\n";
-print "- Koha picks letter.lang from the patron language; CirriusImpact CSV language maps to eng/spa/fre.\n\n";
+print "- SMS text is GSM-7-safe (ASCII) so segments stay ~160 chars; accents would drop to ~70.\n\n";
 
 unless ($no_restart) {
     print "Would you like to restart Koha services now? (y/n): ";

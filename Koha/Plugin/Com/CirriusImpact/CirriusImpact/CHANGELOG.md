@@ -1,3 +1,11 @@
+## 1.3.1 - 2026-07-24
+
+### Template installer modes + CODE-CI letter support
+- **ADDED:** Install modes for `install_message_templates.pl`: `--defaults` (stock CODE at `branchcode=''`), `--ci-templates` (`CODE-CI` only; leave stock alone), `--consortia-branch=CODE` (branch-scoped same CODE), `--consortia-from-plugin` (from Configure → Branches / `enabled_branches`).
+- **ADDED:** Plugin recognizes `*-CI` letter codes (`CHECKOUT-CI`, `HOLD-CI`, …) for export filters, mapping, HOLDDGST digests, and identifier backfill.
+- **ENHANCED:** English SMS/phone stock wording in the installer (grammar and phrasing).
+- **DOCS:** INSTALL / QUICKSTART / TEMPLATE_I18N / V1.6 plugin install guide updated for install modes and GitLab package channel.
+
 ## 1.2.4 - 2026-07-20
 
 ### Multilingual notice templates (default / es-ES / fr-CA)

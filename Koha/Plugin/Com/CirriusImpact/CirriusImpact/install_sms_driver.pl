@@ -24,6 +24,7 @@ use warnings;
 use File::Copy;
 use File::Path qw(make_path);
 use File::Basename;
+use Cwd qw(abs_path);
 
 # ANSI color codes for output
 my $GREEN = "\033[0;32m";
@@ -39,19 +40,17 @@ sub print_info    { print "${BLUE}ℹ${RESET} ", @_, "\n"; }
 
 # Find the plugins directory
 sub find_plugins_dir {
-    my $script_dir = dirname(__FILE__);
-    # Go up from plugin directory to plugins root
-    # Script is in: plugins/Koha/Plugin/Com/CirriusImpact/
-    # We want: plugins/
-    my $plugins_dir = dirname(dirname(dirname(dirname($script_dir))));
-    
-    # Verify it's the plugins directory by checking for SMS directory or other plugins
-    unless (-d $plugins_dir) {
-        print_error "Could not find plugins directory";
-        exit 1;
+    # Walk up from the script location until we find the plugins root
+    # (the directory that contains Koha/Plugin). Resource layout depth
+    # can vary between plugin versions, so don't hardcode the level.
+    my $dir = dirname( abs_path(__FILE__) );
+    for ( 1 .. 6 ) {
+        $dir = dirname($dir);
+        return $dir if -d "$dir/Koha/Plugin";
     }
-    
-    return $plugins_dir;
+
+    print_error "Could not find plugins directory (no Koha/Plugin above script)";
+    exit 1;
 }
 
 # Find the source driver files
@@ -139,44 +138,50 @@ sub install_drivers {
 # Verify the installation
 sub verify_installation {
     print_info "Verifying installation...";
-    
+
+    # The plugins dir is only in @INC when Koha loads it; add it explicitly
+    # for these standalone subprocess checks.
+    my $inc = '-I' . find_plugins_dir();
+
     my $all_ok = 1;
-    
+
     # Verify US::CirriusImpact
-    my $us_result = system('perl', '-MSMS::Send::US::CirriusImpact', '-e', 'exit 0');
+    my $us_result = system('perl', $inc, '-MSMS::Send::US::CirriusImpact', '-e', 'exit 0');
     if ($us_result == 0) {
-        my $version = `perl -MSMS::Send::US::CirriusImpact -e 'print \$SMS::Send::US::CirriusImpact::VERSION'`;
+        my $version = `perl $inc -MSMS::Send::US::CirriusImpact -e 'print \$SMS::Send::US::CirriusImpact::VERSION'`;
         print_success "US::CirriusImpact driver loaded successfully";
         print_info "Version: $version" if $version;
-        my $location = `perl -MSMS::Send::US::CirriusImpact -e 'print \$INC{"SMS/Send/US/CirriusImpact.pm"}'`;
+        my $location = `perl $inc -MSMS::Send::US::CirriusImpact -e 'print \$INC{"SMS/Send/US/CirriusImpact.pm"}'`;
         print_info "Location: $location" if $location;
     } else {
         print_error "US::CirriusImpact driver verification failed";
         $all_ok = 0;
     }
-    
+
     # Verify CirriusImpact (international)
-    my $intl_result = system('perl', '-MSMS::Send::CirriusImpact', '-e', 'exit 0');
+    my $intl_result = system('perl', $inc, '-MSMS::Send::CirriusImpact', '-e', 'exit 0');
     if ($intl_result == 0) {
-        my $version = `perl -MSMS::Send::CirriusImpact -e 'print \$SMS::Send::CirriusImpact::VERSION'`;
+        my $version = `perl $inc -MSMS::Send::CirriusImpact -e 'print \$SMS::Send::CirriusImpact::VERSION'`;
         print_success "CirriusImpact driver loaded successfully";
         print_info "Version: $version" if $version;
-        my $location = `perl -MSMS::Send::CirriusImpact -e 'print \$INC{"SMS/Send/CirriusImpact.pm"}'`;
+        my $location = `perl $inc -MSMS::Send::CirriusImpact -e 'print \$INC{"SMS/Send/CirriusImpact.pm"}'`;
         print_info "Location: $location" if $location;
     } else {
         print_error "CirriusImpact driver verification failed";
         $all_ok = 0;
     }
-    
+
     return $all_ok;
 }
 
 # Test the drivers
 sub test_drivers {
     print_info "Testing driver functionality...";
-    
+
+    my $inc = '-I' . find_plugins_dir();
+
     my $all_ok = 1;
-    
+
     # Test US::CirriusImpact
     my $us_test = q{
         use SMS::Send;
@@ -184,14 +189,14 @@ sub test_drivers {
         exit 0 if $sender;
         exit 1;
     };
-    
-    if (system('perl', '-e', $us_test) == 0) {
+
+    if (system('perl', $inc, '-e', $us_test) == 0) {
         print_success "US::CirriusImpact driver test passed";
     } else {
         print_warning "US::CirriusImpact test failed";
         $all_ok = 0;
     }
-    
+
     # Test CirriusImpact
     my $intl_test = q{
         use SMS::Send;
@@ -199,14 +204,14 @@ sub test_drivers {
         exit 0 if $sender;
         exit 1;
     };
-    
-    if (system('perl', '-e', $intl_test) == 0) {
+
+    if (system('perl', $inc, '-e', $intl_test) == 0) {
         print_success "CirriusImpact driver test passed";
     } else {
         print_warning "CirriusImpact test failed";
         $all_ok = 0;
     }
-    
+
     return $all_ok;
 }
 
@@ -230,7 +235,7 @@ sub print_next_steps {
     print "\n";
     print "3. Configure your notice templates:\n";
     print "   - Add 'CirriusImpact: yes' to the YAML header\n";
-    print "   - See NOTICE_EXAMPLES.md for digest templates\n";
+    print "   - See QUICKSTART.md / TEMPLATE_I18N.md for notice templates\n";
     print "\n";
     print "4. Test the message queue:\n";
     print "   - Run: sudo koha-shell INSTANCE -c '/usr/share/koha/bin/cronjobs/process_message_queue.pl'\n";

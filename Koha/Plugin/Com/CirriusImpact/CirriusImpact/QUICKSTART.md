@@ -92,14 +92,31 @@ sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
 ```
 
-**Default behavior** (no extra flags):
+**Default behavior** (no mode flags → `--defaults`):
+- **Mode:** stock letter `CODE` at `branchcode=''`
 - **Services:** SMS and phone (`message_transport_type` = `sms` and `phone`)
 - **Languages:** `default`, `en`, `es-ES`, `fr-CA` (English, Spanish, French)
 - **Default tab:** Koha `letter.lang=default` is filled from English (`en`)
 
-Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more. All include CirriusImpact YAML markers and GSM-7-safe SMS text.
+Other modes: `--ci-templates` (`CODE-CI` only), `--consortia-branch=CPL,UPL` (branch-scoped same CODE), `--consortia-from-plugin` (branches from Configure → Branches). See INSTALL.md.
+
+Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more. All include CirriusImpact YAML markers and GSM-7-safe SMS text. Plugin also exports `*-CI` letter codes when those are used.
 
 #### Common install variations
+
+**Consortia (from plugin branch list):**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --consortia-from-plugin --no-restart'
+```
+
+**CODE-CI only** (leave stock letters alone):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --ci-templates --no-restart'
+```
 
 **SMS only** (no phone/voice templates):
 

@@ -10,10 +10,55 @@
 </div>
 
 <div class="main container">
+  [% IF claim_message %]
+  <div class="alert alert-success" style="margin: 1em 0; padding: 0.75em 1em; background: #d4edda; border: 1px solid #c3e6cb; color: #155724;">
+    [% claim_message | html %]
+  </div>
+  [% END %]
+  [% IF claim_error %]
+  <div class="alert alert-error" style="margin: 1em 0; padding: 0.75em 1em; background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24;">
+    [% claim_error | html %]
+  </div>
+  [% END %]
+
+  <fieldset>
+    <legend>Claim configuration</legend>
+    <p class="hint">
+      Enter the Library ID and one-time install token from CirriusImpact to pull SFTP host/user/password and feature flags.
+      After a successful claim, Connection and Features below are filled in (you can still edit and Save).
+    </p>
+    [% IF bootstrap_claimed_at %]
+    <p class="hint">
+      Last claimed: <strong>[% bootstrap_claimed_at | html %]</strong>
+      [% IF bootstrap_library_id %] for library <strong>[% bootstrap_library_id | html %]</strong>[% END %]
+    </p>
+    [% END %]
+    <form method="get" style="margin-bottom: 1.5em;">
+      <input type="hidden" name="class" value="[% CLASS %]"/>
+      <input type="hidden" name="method" value="[% METHOD %]"/>
+      <input type="hidden" name="claim" value="1"/>
+      <div class="form-group">
+        <label>Bootstrap API URL</label>
+        <input type="text" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]" class="form-control"/>
+      </div>
+      <div class="form-group">
+        <label>Library ID</label>
+        <input type="text" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]" class="form-control" autocomplete="off"/>
+      </div>
+      <div class="form-group">
+        <label>Install token</label>
+        <input type="password" name="bootstrap_token" value="" class="form-control" autocomplete="off"/>
+      </div>
+      <button type="submit" class="btn btn-primary">Claim / Re-claim</button>
+    </form>
+  </fieldset>
+
   <form method="get">
     <input type="hidden" name="class" value="[% CLASS %]"/>
     <input type="hidden" name="method" value="[% METHOD %]"/>
     <input type="hidden" name="save" value="1"/>
+    <input type="hidden" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]"/>
+    <input type="hidden" name="bootstrap_library_id" value="[% bootstrap_library_id | html %]"/>
 
     <fieldset>
       <legend>Connection</legend>
@@ -24,22 +69,132 @@
     </fieldset>
 
     <fieldset>
-      <legend>Features</legend>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_phone" value="1" [% IF enable_phone %]checked="checked"[% END %]> Enable Phone</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_sms" value="1" [% IF enable_sms %]checked="checked"[% END %]> Enable SMS</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_email" value="1" [% IF enable_email %]checked="checked"[% END %]> Enable Email</label>
-      </div>
-      <div class="checkbox">
-        <label><input type="checkbox" name="enable_whatsapp" value="1" [% IF enable_whatsapp %]checked="checked"[% END %]> Enable WhatsApp</label>
-      </div>
-      <div class="checkbox">
-      </div>
+      <legend>Branch services</legend>
+      [% IF consortia_mode == 'independent' %]
+      <p class="hint">
+        Type 2 (independent): assign each Koha home branch to a Portal member, then enable
+        SMS / CIXL / Outbound per member within Portal entitlements. CIXL requires SMS.
+        Unassigned branches and disabled services are not exported (sms/phone marked failed).
+      </p>
+      [% IF member_catalog.size %]
+        <h4>Member services (within entitlements)</h4>
+        <div class="member-service-matrix" style="max-height: 14em; overflow: auto; border: 1px solid #ccc; margin-bottom: 1em;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Member</th>
+                <th style="padding: 0.5em; text-align: center;">SMS</th>
+                <th style="padding: 0.5em; text-align: center;">CIXL</th>
+                <th style="padding: 0.5em; text-align: center;">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH m IN member_catalog %]
+              <tr data-member="[% m.library_id | html %]">
+                <td style="padding: 0.4em 0.5em;"><code>[% m.library_id | html %]</code></td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-sms" name="mem_sms_[% m.library_id | html %]" value="1"
+                    [% IF m.sms %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-cixl" name="mem_cixl_[% m.library_id | html %]" value="1"
+                    data-entitle-cixl="[% IF m.entitle_cixl %]1[% ELSE %]0[% END %]"
+                    [% IF m.cixl %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_cixl && m.sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="mem-outbound" name="mem_outbound_[% m.library_id | html %]" value="1"
+                    [% IF m.outbound %]checked="checked"[% END %]
+                    [% UNLESS m.entitle_outbound %]disabled="disabled"[% END %]>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+        <h4>Branch → member</h4>
+        <div class="branch-member-matrix" style="max-height: 22em; overflow: auto; border: 1px solid #ccc;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Branch</th>
+                <th style="padding: 0.5em;">Member</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH lib IN libraries %]
+              <tr>
+                <td style="padding: 0.4em 0.5em;">[% lib.branchname | html %] ([% lib.branchcode | html %])</td>
+                <td style="padding: 0.4em 0.5em;">
+                  <select name="branch_member_[% lib.branchcode | html %]" class="form-control">
+                    <option value="">— unassigned —</option>
+                    [% FOREACH m IN member_catalog %]
+                    <option value="[% m.library_id | html %]"
+                      [% IF lib.member_library == m.library_id %]selected="selected"[% END %]>
+                      [% m.library_id | html %]
+                    </option>
+                    [% END %]
+                  </select>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+      [% ELSE %]
+        <p class="hint">No member catalog yet. Link members on the Portal Consortia screen, then Re-claim.</p>
+      [% END %]
+      [% ELSE %]
+      <p class="hint">
+        Select which services each <strong>home library</strong> may send to CirriusImpact.
+        Unchecked branches/services are not exported: their SMS/phone notices are
+        marked failed in Koha with the reason, so Koha does not try to send them itself.
+        New branches default off until configured. CIXL requires SMS.
+        On Save, the selection is synced to the Configuration Portal (requires a successful Claim first).
+      </p>
+      [% IF libraries.size %]
+        <div class="branch-service-matrix" style="max-height: 22em; overflow: auto; border: 1px solid #ccc;">
+          <table class="table table-striped" style="margin: 0; width: 100%;">
+            <thead>
+              <tr>
+                <th style="padding: 0.5em;">Branch</th>
+                <th style="padding: 0.5em; text-align: center;">SMS</th>
+                <th style="padding: 0.5em; text-align: center;">CIXL</th>
+                <th style="padding: 0.5em; text-align: center;">Outbound</th>
+              </tr>
+            </thead>
+            <tbody>
+              [% FOREACH lib IN libraries %]
+              <tr data-branch="[% lib.branchcode | html %]">
+                <td style="padding: 0.4em 0.5em;">[% lib.branchname | html %] ([% lib.branchcode | html %])</td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-sms" name="svc_sms_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.sms %]checked="checked"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-cixl" name="svc_cixl_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.cixl %]checked="checked"[% END %]
+                    [% UNLESS lib.sms %]disabled="disabled"[% END %]>
+                </td>
+                <td style="text-align: center;">
+                  <input type="checkbox" class="svc-outbound" name="svc_outbound_[% lib.branchcode | html %]" value="1"
+                    [% IF lib.outbound %]checked="checked"[% END %]>
+                </td>
+              </tr>
+              [% END %]
+            </tbody>
+          </table>
+        </div>
+        <p class="hint" style="margin-top: 0.5em;">CIXL appends an Interactive Portal short URL to SMS notices for that branch.</p>
+      [% ELSE %]
+        <p class="hint">No libraries found in this Koha instance.</p>
+      [% END %]
+      [% END %]
+    </fieldset>
 
+    <fieldset>
+      <legend>Features</legend>
       <div class="checkbox">
         <label>
           <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
@@ -48,10 +203,14 @@
       </div>
       <div class="checkbox">
         <label>
-          <input type="checkbox" name="include_messagetext" value="1" [% IF include_messagetext %]checked="checked"[% END %]>
+          <input type="checkbox" name="include_messagetext" value="1"
+            [% IF include_messagetext %]checked="checked"[% END %]>
           Include messageText column in CSV output
         </label>
       </div>
+      [% IF consortia_mode %]
+      <p class="hint">Consortia mode: <strong>[% consortia_mode | html %]</strong></p>
+      [% END %]
     </fieldset>
 
     <fieldset>
@@ -82,6 +241,49 @@ function copyPre(id) {
     document.body.removeChild(ta);
   }
 }
+
+(function () {
+  function syncCixl(row) {
+    if (!row) return;
+    var sms = row.querySelector('.svc-sms');
+    var cixl = row.querySelector('.svc-cixl');
+    if (!sms || !cixl) return;
+    if (sms.checked) {
+      cixl.disabled = false;
+    } else {
+      cixl.checked = false;
+      cixl.disabled = true;
+    }
+  }
+  document.querySelectorAll('.branch-service-matrix tr[data-branch]').forEach(function (row) {
+    syncCixl(row);
+    var sms = row.querySelector('.svc-sms');
+    if (sms) {
+      sms.addEventListener('change', function () { syncCixl(row); });
+    }
+  });
+
+  function syncMemCixl(row) {
+    if (!row) return;
+    var sms = row.querySelector('.mem-sms');
+    var cixl = row.querySelector('.mem-cixl');
+    if (!sms || !cixl) return;
+    var entitled = cixl.getAttribute('data-entitle-cixl') === '1';
+    if (entitled && sms.checked && !sms.disabled) {
+      cixl.disabled = false;
+    } else {
+      cixl.checked = false;
+      cixl.disabled = true;
+    }
+  }
+  document.querySelectorAll('.member-service-matrix tr[data-member]').forEach(function (row) {
+    syncMemCixl(row);
+    var sms = row.querySelector('.mem-sms');
+    if (sms) {
+      sms.addEventListener('change', function () { syncMemCixl(row); });
+    }
+  });
+})();
 </script>
 
 [% INCLUDE 'intranet-bottom.inc' %]
