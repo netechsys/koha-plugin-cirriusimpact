@@ -194,6 +194,113 @@
     </fieldset>
 
     <fieldset>
+      <legend>Install notice templates</legend>
+      <p class="hint">
+        Install CirriusImpact-ready SMS/phone templates into Koha's <code>letter</code> table
+        (same as <code>install_message_templates.pl</code>). Matching rows are
+        <strong>overwritten</strong>. Save Branch services first if you use
+        <em>consortia from plugin</em>. No Koha restart is required from this screen.
+      </p>
+      [% IF install_templates_log %]
+      <pre style="max-height: 16em; overflow: auto; background: #f7f7f7; border: 1px solid #ccc; padding: 0.75em; white-space: pre-wrap;">[% install_templates_log | html %]</pre>
+      [% END %]
+      <form method="get" style="margin-bottom: 1em;" id="ci-install-templates-form"
+            onsubmit="return confirm('Install/overwrite CirriusImpact notice templates in Koha now?');">
+        <input type="hidden" name="class" value="[% CLASS %]"/>
+        <input type="hidden" name="method" value="[% METHOD %]"/>
+        <input type="hidden" name="install_templates" value="1"/>
+
+        <div class="form-group">
+          <label><strong>Install mode</strong></label>
+          <div class="radio">
+            <label>
+              <input type="radio" name="install_mode" value="defaults" checked="checked">
+              Defaults — stock letter codes at system default (<code>branchcode=''</code>)
+            </label>
+          </div>
+          <div class="radio">
+            <label>
+              <input type="radio" name="install_mode" value="ci-templates">
+              CI templates — create <code>CODE-CI</code> only; leave stock codes alone
+            </label>
+          </div>
+          <div class="radio">
+            <label>
+              <input type="radio" name="install_mode" value="consortia-from-plugin">
+              Consortia from plugin — branch-scoped rows for every branch with a service enabled above
+            </label>
+          </div>
+          <div class="radio">
+            <label>
+              <input type="radio" name="install_mode" value="consortia-branch">
+              Consortia branches — same letter codes, specific Koha branchcodes
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="ci-install-branch-pick">
+          <label>Koha branchcodes (for consortia-branch mode)</label>
+          [% IF libraries.size %]
+          <div style="max-height: 10em; overflow: auto; border: 1px solid #ccc; padding: 0.5em; margin-bottom: 0.5em;">
+            [% FOREACH lib IN libraries %]
+            <label style="display: block; font-weight: normal;">
+              <input type="checkbox" name="install_branch" value="[% lib.branchcode | html %]">
+              [% lib.branchname | html %] ([% lib.branchcode | html %])
+            </label>
+            [% END %]
+          </div>
+          [% END %]
+          <input type="text" name="install_consortia_branches" value="" class="form-control"
+                 placeholder="Or type CSV: CPL,UPL"/>
+        </div>
+
+        <div class="form-group">
+          <label><strong>Services</strong></label>
+          <label style="font-weight: normal; margin-right: 1em;">
+            <input type="checkbox" name="install_svc_sms" value="1" checked="checked"> SMS
+          </label>
+          <label style="font-weight: normal;">
+            <input type="checkbox" name="install_svc_phone" value="1" checked="checked"> Phone / voice
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label><strong>Languages</strong></label>
+          <label style="font-weight: normal; margin-right: 0.75em;">
+            <input type="checkbox" name="install_lang_default" value="1" checked="checked"> default
+          </label>
+          <label style="font-weight: normal; margin-right: 0.75em;">
+            <input type="checkbox" name="install_lang_en" value="1" checked="checked"> en
+          </label>
+          <label style="font-weight: normal; margin-right: 0.75em;">
+            <input type="checkbox" name="install_lang_es" value="1" checked="checked"> es-ES
+          </label>
+          <label style="font-weight: normal;">
+            <input type="checkbox" name="install_lang_fr" value="1" checked="checked"> fr-CA
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label>Default tab content language</label>
+          <select name="install_default_language" class="form-control" style="max-width: 12em;">
+            <option value="en" selected="selected">English (en)</option>
+            <option value="es-ES">Spanish (es-ES)</option>
+            <option value="fr-CA">French (fr-CA)</option>
+          </select>
+        </div>
+
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" name="install_templates_confirm" value="1">
+            I understand this will create or <strong>overwrite</strong> matching CirriusImpact notice templates
+          </label>
+        </div>
+
+        <button type="submit" class="btn btn-warning">Install templates</button>
+      </form>
+    </fieldset>
+
+    <fieldset>
       <legend>Features</legend>
       <div class="checkbox">
         <label>

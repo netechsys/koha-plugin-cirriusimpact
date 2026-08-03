@@ -78,7 +78,9 @@ Manual Connection fields remain if CirriusImpact directs you not to use Claim. T
 
 ### 4. Install Message Templates (Recommended)
 
-The plugin includes `install_message_templates.pl`, which installs CirriusImpact-ready notice templates into Koha's `letter` table. Run it as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can read enabled branches):
+**From Configure (preferred):** After saving Branch services, use **Install notice templates** on the plugin Configure page (mode, services, languages, confirm overwrite). No SSH required.
+
+**From CLI** (same installer), as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can read enabled branches):
 
 ```bash
 sudo koha-shell INSTANCE -c \

@@ -51,7 +51,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.1";
+our $VERSION = "1.3.2";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -116,6 +116,17 @@ sub configure {
         } else {
             $claim_error = $msg;
         }
+    }
+    elsif ( $cgi->param('install_templates') ) {
+        my ( $ok, $msg, $log ) = $self->_ci_configure_install_templates($cgi);
+        my $template = $self->get_template({ file => 'configure.tt' });
+        $template->param( $self->_ci_configure_template_params(
+            claim_message          => $ok ? $msg : undef,
+            claim_error            => $ok ? undef : $msg,
+            install_templates_log  => $log,
+        ) );
+        $self->output_html($template->output());
+        return;
     }
     elsif ( $cgi->param('save') ) {
         $self->_ci_ensure_branch_services_migrated;
@@ -182,6 +193,82 @@ sub configure {
         claim_error   => $claim_error,
     ) );
     $self->output_html($template->output());
+}
+
+# POST/GET from Configure → Install notice templates section.
+sub _ci_configure_install_templates {
+    my ( $self, $cgi ) = @_;
+
+    unless ( scalar $cgi->param('install_templates_confirm') ) {
+        return ( 0, 'Confirm the overwrite checkbox before installing templates.', '' );
+    }
+
+    my $mode = scalar $cgi->param('install_mode') // 'defaults';
+    $mode = 'defaults' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
+
+    my @services;
+    push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
+    push @services, 'phone' if scalar $cgi->param('install_svc_phone');
+    @services = ( 'sms', 'phone' ) unless @services;
+
+    my @languages;
+    push @languages, 'default' if scalar $cgi->param('install_lang_default');
+    push @languages, 'en'      if scalar $cgi->param('install_lang_en');
+    push @languages, 'es-ES'   if scalar $cgi->param('install_lang_es');
+    push @languages, 'fr-CA'   if scalar $cgi->param('install_lang_fr');
+    @languages = ( 'default', 'en', 'es-ES', 'fr-CA' ) unless @languages;
+
+    my $default_language = scalar $cgi->param('install_default_language') // 'en';
+    $default_language = 'en' unless $default_language =~ /^(en|es-ES|fr-CA|eng|spa|fre)\z/;
+
+    my @branches;
+    if ( $mode eq 'consortia-branch' ) {
+        my $raw = scalar $cgi->param('install_consortia_branches') // '';
+        for my $b ( split /,/, $raw ) {
+            $b =~ s/^\s+|\s+$//g;
+            push @branches, $b if length $b;
+        }
+        my @multi = $cgi->param('install_branch');
+        for my $b (@multi) {
+            next unless defined $b;
+            $b =~ s/^\s+|\s+$//g;
+            push @branches, $b if length $b;
+        }
+        {
+            my %seen;
+            @branches = grep { !$seen{$_}++ } @branches;
+        }
+        unless (@branches) {
+            return ( 0, 'Select or enter at least one Koha branchcode for consortia-branch mode.', '' );
+        }
+    }
+
+    my %run = (
+        defaults              => ( $mode eq 'defaults' ) ? 1 : 0,
+        ci_templates          => ( $mode eq 'ci-templates' ) ? 1 : 0,
+        consortia_from_plugin => ( $mode eq 'consortia-from-plugin' ) ? 1 : 0,
+        consortia_branches    => \@branches,
+        services              => \@services,
+        languages             => \@languages,
+        default_language      => $default_language,
+        plugin                => $self,
+    );
+
+    my $result = eval {
+        require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
+        Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run(%run);
+    };
+    if ($@) {
+        return ( 0, "Template installer failed to load: $@", '' );
+    }
+    unless ( $result && ref $result eq 'HASH' ) {
+        return ( 0, 'Template installer returned no result.', '' );
+    }
+    if ( $result->{ok} ) {
+        my $msg = "Installed/updated $result->{count} notice template row(s).";
+        return ( 1, $msg, $result->{log} // '' );
+    }
+    return ( 0, ( $result->{error} || 'Template install failed.' ), $result->{log} // '' );
 }
 
 # POST library_id + token to public bootstrap claim API; apply SFTP + features.

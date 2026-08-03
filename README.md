@@ -9,10 +9,10 @@ Exports Koha patron notices for CirriusImpact SMS and voice delivery.
 
 | Channel | Version | Package |
 |---------|---------|---------|
-| **Production (stable)** | **v1.3.1** | [koha-plugin-cirriusimpact-v1.3.1.kpz](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.3.1) |
-| Previous | v1.2.4 | See [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) |
+| **Production (stable)** | **v1.3.2** | [koha-plugin-cirriusimpact-v1.3.2.kpz](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.3.2) |
+| Previous | v1.3.1 | See [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) |
 
-Use **v1.3.1** for production Koha sites unless CirriusImpact specifies another build.
+Use **v1.3.2** for production Koha sites unless CirriusImpact specifies another build.
 
 ## Documentation
 

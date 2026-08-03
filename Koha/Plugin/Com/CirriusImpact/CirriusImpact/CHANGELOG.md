@@ -1,3 +1,9 @@
+## 1.3.2 - 2026-08-03
+
+### Install notice templates from Configure UI
+- **ADDED:** Configure → **Install notice templates** runs the same installer as `install_message_templates.pl` (modes, services, languages, confirm overwrite).
+- **ADDED:** `Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates` shared module used by Configure and the CLI script.
+
 ## 1.3.1 - 2026-07-24
 
 ### Template installer modes + CODE-CI letter support

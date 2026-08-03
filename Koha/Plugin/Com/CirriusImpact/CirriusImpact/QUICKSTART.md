@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.1**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.2**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.1.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.2.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -104,7 +104,9 @@ Click **Save**.
 
 ### Step 5: Install Message Templates (Recommended)
 
-Install CirriusImpact-ready notice templates into Koha's `letter` table. Run as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can see enabled branches).
+**Option A — from Configure (no SSH):** After saving Branch services, open **Configure → Install notice templates**, choose a mode, confirm overwrite, click **Install templates**. Results appear on the same page.
+
+**Option B — CLI** (`koha-shell`), same options as the UI:
 
 ```bash
 sudo koha-shell INSTANCE -c \

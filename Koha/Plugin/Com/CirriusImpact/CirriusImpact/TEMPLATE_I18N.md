@@ -11,6 +11,8 @@
 
 `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, not `CHECKOUT-CPL`. The plugin also exports `*-CI` letter codes.
 
+**From the plugin UI:** Configure → **Install notice templates** (same options; no SSH).
+
 ## Languages
 
 | Koha `letter.lang` | Meaning | CirriusImpact CSV `language` |
