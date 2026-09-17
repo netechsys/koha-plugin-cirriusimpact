@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.2';
+our $VERSION = '1.3.4';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -37,6 +37,130 @@ sub _log {
     $msg .= "\n" unless $msg =~ /\n\z/;
     push @$lines, $msg;
     return;
+}
+
+# True when letter.content is already CirriusImpact YAML.
+sub _already_ci_yaml {
+    my ($content) = @_;
+    return 0 unless defined $content && length $content;
+    return ( $content =~ /CirriusImpact\s*:\s*yes/i ) ? 1 : 0;
+}
+
+# Escape a string as a YAML double-quoted scalar (single logical line).
+sub _yaml_double_quote {
+    my ($s) = @_;
+    $s = '' unless defined $s;
+    $s =~ s/\r\n/\n/g;
+    $s =~ s/\r/\n/g;
+    $s =~ s/\\/\\\\/g;
+    $s =~ s/"/\\"/g;
+    $s =~ s/\n/\\n/g;
+    $s =~ s/\t/\\t/g;
+    return qq{"$s"};
+}
+
+# Preserve original notice as Template Toolkit comments (hidden at render time).
+# Neutralize "%]" so a comment cannot be closed early by notice text.
+sub _tt_comment_block {
+    my ($original) = @_;
+    $original = '' unless defined $original;
+    $original =~ s/\r\n/\n/g;
+    $original =~ s/\r/\n/g;
+    my @lines = split /\n/, $original, -1;
+    # Avoid writing literal [%# ... %] inside Perl quotes (parser hazard).
+    my $open  = '[%' . '#';
+    my $close = '%]';
+    my @out = ( $open . ' Original Notice Template ' . $close );
+    for my $line (@lines) {
+        my $safe = $line;
+        # Insert a space so embedded Template Toolkit closers cannot end this comment early.
+        $safe =~ s/%\]/% ]/g;
+        push @out, $open . ' ' . $safe . ' ' . $close;
+    }
+    return join( "\n", @out );
+}
+
+# Wrap existing Koha notice text in CirriusImpact YAML for plugin export.
+# SMS → sms.text; phone → call.script. Appends original as TT comments.
+sub _wrap_existing_as_ci {
+    my ( $original, $transport ) = @_;
+    my $body = defined $original ? $original : '';
+    $body =~ s/\A\s+//;
+    $body =~ s/\s+\z//;
+
+    my $quoted = _yaml_double_quote($body);
+    my $yaml;
+    # Build with single-quoted heredoc so Template Toolkit "[% %]" is literal Perl text.
+    if ( ( $transport // '' ) eq 'phone' ) {
+        $yaml = <<'YAML';
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: __CI_BODY__
+---
+YAML
+    }
+    else {
+        $yaml = <<'YAML';
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: __CI_BODY__
+---
+YAML
+    }
+    $yaml =~ s/__CI_BODY__/$quoted/;
+    $yaml .= "\n" . _tt_comment_block($original) . "\n";
+    return $yaml;
+}
+
+# Unescape a YAML double-quoted scalar produced by _yaml_double_quote.
+sub _yaml_unescape_double {
+    my ($s) = @_;
+    $s = '' unless defined $s;
+    $s =~ s/\\n/\n/g;
+    $s =~ s/\\t/\t/g;
+    $s =~ s/\\"/"/g;
+    $s =~ s/\\\\/\\/g;
+    return $s;
+}
+
+# Recover pre-wrap notice text from a CirriusImpact-wrapped letter.
+# Prefers the TT comment archive; falls back to sms.text / call.script.
+sub _extract_original_from_wrapped {
+    my ($content) = @_;
+    return undef unless defined $content && length $content;
+
+    if ( $content =~ /\[%#\s*Original Notice Template\s*%\]\s*\n(.*)\z/s ) {
+        my $block = $1;
+        my @lines;
+        for my $line ( split /\n/, $block ) {
+            next unless defined $line;
+            if ( $line =~ /^\s*\[%#\s?(.*?)\s*%\]\s*$/ ) {
+                my $body = $1;
+                $body =~ s/% \]/%]/g;  # reverse neutralization from _tt_comment_block
+                push @lines, $body;
+            }
+            elsif ( $line =~ /\S/ ) {
+                last;
+            }
+        }
+        return join( "\n", @lines ) if @lines;
+    }
+
+    # Fallback when comments were stripped or notice was hand-edited CI YAML.
+    if ( $content =~ /(?:^|\n)[ \t]*(?:text|script):[ \t]*"((?:\\.|[^"\\])*)"/s ) {
+        return _yaml_unescape_double($1);
+    }
+    if ( $content =~ /(?:^|\n)[ \t]*(?:text|script):[ \t]*'((?:\\.|[^'\\])*)'/s ) {
+        my $s = $1;
+        $s =~ s/\\'/'/g;
+        $s =~ s/\\\\/\\/g;
+        return $s;
+    }
+    return undef;
 }
 
 sub _resolve_services {
@@ -1431,17 +1555,51 @@ call:
     };
 
     my $install_template = sub {
-        my ($name, $template, $lang, $code_override, $branchcode) = @_;
-        $branchcode = '' unless defined $branchcode;
-        my $content = $content_for_lang->($template, $lang);
-        unless (defined $content && $content =~ /\S/) {
-            _log(\@log_lines, "Skipping $name ($lang) — no content");
-            return 0;
-        }
+        my ($name, $template, $lang, $code_override, $branchcode, $wrap_existing) = @_;
+        $branchcode     = '' unless defined $branchcode;
+        $wrap_existing  = 0  unless $wrap_existing;
 
         my $code = defined $code_override ? $code_override : $template->{code};
-        my $src = ($lang eq 'default') ? "default<-$default_content_key" : $lang;
+        my $src  = ($lang eq 'default') ? "default<-$default_content_key" : $lang;
         my $branch_label = length($branchcode) ? "branch=$branchcode" : "branch=DEFAULT";
+
+        my $content;
+        if ($wrap_existing) {
+            my $fetch_sth = $dbh->prepare(q{
+                SELECT content FROM letter
+                WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                  AND branchcode = ?
+                LIMIT 1
+            });
+            $fetch_sth->execute(
+                $template->{module}, $code, $template->{transport}, $lang, $branchcode
+            );
+            my ($existing) = $fetch_sth->fetchrow_array;
+            $fetch_sth->finish();
+
+            unless ( defined $existing && $existing =~ /\S/ ) {
+                _log(
+                    \@log_lines,
+                    "Skipped $name code=$code [$src] ($branch_label) — no existing notice text to wrap"
+                );
+                return 0;
+            }
+            if ( _already_ci_yaml($existing) ) {
+                _log(
+                    \@log_lines,
+                    "Skipped $name code=$code [$src] ($branch_label) — already CirriusImpact YAML"
+                );
+                return 0;
+            }
+            $content = _wrap_existing_as_ci( $existing, $template->{transport} );
+        }
+        else {
+            $content = $content_for_lang->( $template, $lang );
+            unless ( defined $content && $content =~ /\S/ ) {
+                _log( \@log_lines, "Skipping $name ($lang) — no canned content" );
+                return 0;
+            }
+        }
 
         my $check_sth = $dbh->prepare(q{
             SELECT COUNT(*) FROM letter
@@ -1467,8 +1625,14 @@ call:
                 $template->{module}, $code, $template->{transport}, $lang, $branchcode
             );
             $update_sth->finish();
-            _log(\@log_lines, "Updated $name code=$code [$src] ($branch_label)");
-        } else {
+            _log(
+                \@log_lines,
+                ( $wrap_existing ? "Wrapped" : "Updated" )
+                  . " $name code=$code [$src] ($branch_label)"
+            );
+        }
+        else {
+            # Wrap mode never inserts (no source text). Canned CI-templates may insert.
             my $insert_sth = $dbh->prepare(q{
                 INSERT INTO letter (module, code, message_transport_type, content, title, name, branchcode, lang)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1485,15 +1649,18 @@ call:
 
     my %want_service = map { $_ => 1 } @want_services;
     my $count = 0;
+    # Each target: [code_mode, branchcode, wrap_existing]
+    # code_mode undef = stock code; '__CI__' = CODE-CI (canned samples)
+    # wrap_existing: read existing letter text and wrap in CirriusImpact YAML
     my @targets;
     if ($do_defaults) {
-        push @targets, [undef, ''];
+        push @targets, [ undef, '', 1 ];
     }
     if ($do_ci_templates) {
-        push @targets, ['__CI__', ''];
+        push @targets, [ '__CI__', '', 0 ];
     }
     for my $b (@consortia_branches) {
-        push @targets, [undef, $b];
+        push @targets, [ undef, $b, 1 ];
     }
 
     eval {
@@ -1503,12 +1670,14 @@ call:
                 my $tpl = $templates{$name};
                 next unless $want_service{ $tpl->{transport} };
                 for my $t (@targets) {
-                    my ($code_mode, $branch) = @$t;
+                    my ($code_mode, $branch, $wrap_existing) = @$t;
                     my $code_override;
                     if (defined $code_mode && $code_mode eq '__CI__') {
                         $code_override = $tpl->{code} . '-CI';
                     }
-                    $count += $install_template->($name, $tpl, $lang, $code_override, $branch);
+                    $count += $install_template->(
+                        $name, $tpl, $lang, $code_override, $branch, $wrap_existing
+                    );
                 }
             }
         }
@@ -1540,6 +1709,200 @@ call:
             services           => \@want_services,
             languages          => \@want_langs,
             default_language   => $default_content_key,
+        },
+    };
+}
+
+# Reverse InstallMessageTemplates::run for the same mode selection.
+# - defaults / consortia: restore stock letter content from archived TT comments
+#   (fallback: sms.text / call.script body)
+# - ci-templates: DELETE CODE-CI rows installed as canned samples
+#
+# run_remove(%same_opts_as_run)
+sub run_remove {
+    my (%opts) = @_;
+    my @log_lines;
+
+    my @want_langs;
+    my @want_services;
+    eval {
+        @want_langs    = _resolve_languages( $opts{languages} );
+        @want_services = _resolve_services( $opts{services} );
+        1;
+    } or do {
+        my $err = $@ // 'option error';
+        chomp $err;
+        return { ok => 0, count => 0, log => '', error => $err };
+    };
+
+    my $do_defaults     = $opts{defaults} ? 1 : 0;
+    my $do_ci_templates = $opts{ci_templates} ? 1 : 0;
+    my @consortia_branches;
+    if ( ref $opts{consortia_branches} eq 'ARRAY' ) {
+        @consortia_branches = @{ $opts{consortia_branches} };
+    }
+    elsif ( defined $opts{consortia_branches} && length $opts{consortia_branches} ) {
+        @consortia_branches = split /,/, $opts{consortia_branches};
+    }
+    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
+    @consortia_branches = grep { length } @consortia_branches;
+
+    my $dbh = $opts{dbh};
+    unless ($dbh) {
+        eval {
+            require C4::Context;
+            $dbh = C4::Context->dbh;
+            1;
+        } or do {
+            return { ok => 0, count => 0, log => '', error => "Database unavailable: $@" };
+        };
+    }
+
+    if ( $opts{consortia_from_plugin} ) {
+        my @from_plugin = _plugin_enabled_branches( $opts{plugin}, $dbh, \@log_lines );
+        if (@from_plugin) {
+            _log( \@log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
+            push @consortia_branches, @from_plugin;
+        }
+        else {
+            _log( \@log_lines, "consortia_from_plugin: no concrete branches in enabled_branches (unset/*/empty)." );
+        }
+    }
+
+    {
+        my %seen;
+        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
+    }
+
+    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
+        $do_defaults = 1;
+        _log( \@log_lines, "No remove mode given; assuming defaults." );
+    }
+
+    _log( \@log_lines, "CirriusImpact Message Template Remover / Revert" );
+    _log( \@log_lines, "Services: " . join( ', ', @want_services ) );
+    _log( \@log_lines, "Languages: " . join( ', ', @want_langs ) );
+    my $modes = '';
+    $modes .= " defaults" if $do_defaults;
+    $modes .= " ci-templates" if $do_ci_templates;
+    $modes .= " consortia-branch=" . join( ',', @consortia_branches ) if @consortia_branches;
+    _log( \@log_lines, "Modes:$modes" );
+
+    my %want_service = map { $_ => 1 } @want_services;
+    my %want_lang    = map { $_ => 1 } @want_langs;
+    my $count        = 0;
+
+    my @branch_targets;
+    push @branch_targets, '' if $do_defaults;
+    push @branch_targets, @consortia_branches;
+
+    eval {
+        # 1) Revert wrapped stock / branch notices
+        for my $branch (@branch_targets) {
+            my $branch_label = length($branch) ? "branch=$branch" : "branch=DEFAULT";
+            my $sth = $dbh->prepare(q{
+                SELECT module, code, message_transport_type, lang, content
+                FROM letter
+                WHERE branchcode = ?
+                  AND content LIKE '%CirriusImpact%'
+            });
+            $sth->execute($branch);
+            while ( my $row = $sth->fetchrow_hashref ) {
+                my $code      = $row->{code} // '';
+                my $transport = $row->{message_transport_type} // '';
+                my $lang      = $row->{lang} // '';
+                next unless $want_service{$transport};
+                next unless $want_lang{$lang};
+                # Stock/consortia revert never touches CODE-CI samples
+                next if $code =~ /-CI\z/;
+                next unless _already_ci_yaml( $row->{content} );
+
+                my $original = _extract_original_from_wrapped( $row->{content} );
+                unless ( defined $original && $original =~ /\S/ ) {
+                    _log(
+                        \@log_lines,
+                        "Skipped revert $code/$transport [$lang] ($branch_label) — cannot recover original text"
+                    );
+                    next;
+                }
+
+                my $upd = $dbh->prepare(q{
+                    UPDATE letter
+                    SET content = ?
+                    WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                      AND branchcode = ?
+                });
+                $upd->execute(
+                    $original,
+                    $row->{module}, $code, $transport, $lang, $branch
+                );
+                $upd->finish();
+                $count++;
+                _log( \@log_lines, "Reverted $code/$transport [$lang] ($branch_label)" );
+            }
+            $sth->finish();
+        }
+
+        # 2) Remove canned CODE-CI sample rows
+        if ($do_ci_templates) {
+            my $sth = $dbh->prepare(q{
+                SELECT module, code, message_transport_type, lang, branchcode, content
+                FROM letter
+                WHERE code LIKE '%-CI'
+                  AND branchcode = ''
+                  AND content LIKE '%CirriusImpact%'
+            });
+            $sth->execute();
+            while ( my $row = $sth->fetchrow_hashref ) {
+                my $transport = $row->{message_transport_type} // '';
+                my $lang      = $row->{lang} // '';
+                next unless $want_service{$transport};
+                next unless $want_lang{$lang};
+                next unless _already_ci_yaml( $row->{content} );
+
+                my $del = $dbh->prepare(q{
+                    DELETE FROM letter
+                    WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                      AND branchcode = ?
+                });
+                $del->execute(
+                    $row->{module}, $row->{code}, $transport, $lang, $row->{branchcode} // ''
+                );
+                $del->finish();
+                $count++;
+                _log(
+                    \@log_lines,
+                    "Deleted CI sample $row->{code}/$transport [$lang] (branch=DEFAULT)"
+                );
+            }
+            $sth->finish();
+        }
+        1;
+    } or do {
+        my $err = $@ // 'remove failed';
+        chomp $err;
+        return {
+            ok    => 0,
+            count => $count,
+            log   => join( '', @log_lines ),
+            error => $err,
+        };
+    };
+
+    _log( \@log_lines, "=" x 50 );
+    _log( \@log_lines, "Remove/revert complete! Changed $count letter row(s)" );
+
+    return {
+        ok    => 1,
+        count => $count,
+        log   => join( '', @log_lines ),
+        error => '',
+        modes => {
+            defaults           => $do_defaults,
+            ci_templates       => $do_ci_templates,
+            consortia_branches => \@consortia_branches,
+            services           => \@want_services,
+            languages          => \@want_langs,
         },
     };
 }

@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.2**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.4**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.2.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.4.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -104,32 +104,34 @@ Click **Save**.
 
 ### Step 5: Install Message Templates (Recommended)
 
-**Option A — from Configure (no SSH):** After saving Branch services, open **Configure → Install notice templates**, choose a mode, confirm overwrite, click **Install templates**. Results appear on the same page.
+**Option A — from Configure (no SSH):** After saving Branch services, open **Configure → Install notice templates**, choose a mode (usually **Defaults**), confirm, click **Install templates**. To undo later, use **Remove / revert templates** with the same mode. Results appear on the same page.
 
 **Option B — CLI** (`koha-shell`), same options as the UI:
 
 ```bash
 sudo koha-shell INSTANCE -c \
-  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --no-restart'
 ```
 
 #### Install modes (pick one)
 
-| Mode | What it writes | When to use |
+| Mode | What it does | When to use |
 |------|----------------|-------------|
-| `--defaults` | Stock letter `CODE` at `branchcode=''` | Single library (default if no mode given) |
-| `--ci-templates` | `CODE-CI` only (`CHECKOUT-CI`, `HOLD-CI`, …); stock left alone | Alternate letter codes for CI members |
-| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped `letter.branchcode` | Consortia; explicit Koha branchcodes |
-| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
+| `--defaults` | **Wrap** existing stock letters at `branchcode=''` in CirriusImpact YAML (keeps your wording) | Single library (default if no mode given) |
+| `--ci-templates` | Install **canned** samples as `CODE-CI` only; stock left alone | Optional samples / alternate codes |
+| `--consortia-branch=CPL[,UPL…]` | **Wrap** existing letters for those Koha branchcodes | Consortia; explicit Koha branchcodes |
+| `--consortia-from-plugin` | Same wrap for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
 
-**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Use Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`). The plugin also exports `*-CI` letter codes when those are used.
+**Important:** `--consortia-branch=CPL` updates `CHECKOUT` with `branchcode=CPL`, **not** `CHECKOUT-CPL`. Use Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
+
+Defaults/Consortia wrap your existing notice text and archive the original in `[%# Original Notice Template %]` comments. Add `--remove` (or Configure → Remove / revert) to restore.
 
 #### Default behavior (no mode flags → `--defaults`)
 
-- Stock letter `CODE` at `branchcode=''`
+- Wrap stock letter `CODE` at `branchcode=''`
 - Services: SMS and phone
 - Languages: `default`, `en`, `es-ES`, `fr-CA`
-- Default tab: filled from English (`en`)
+- Skip notices that already have `CirriusImpact: yes` or have no text
 
 Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more.
 
@@ -140,6 +142,13 @@ Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PRED
 ```bash
 sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --defaults --no-restart'
+```
+
+**Revert Defaults wrap:**
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --defaults --remove --no-restart'
 ```
 
 **Consortia (branches from Branch services matrix):**
@@ -156,7 +165,7 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --no-restart'
 ```
 
-**CODE-CI only** (leave stock letters alone):
+**CODE-CI canned samples only** (leave stock letters alone):
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -177,7 +186,7 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --services=phone --no-restart'
 ```
 
-**Spanish-primary Default tab:**
+**Spanish-primary Default tab** (applies to canned CI-templates content for `letter.lang=default`):
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -199,6 +208,7 @@ sudo koha-shell INSTANCE -c \
 | `--ci-templates` | flag | off |
 | `--consortia-branch` | Koha branchcode(s), repeatable / comma-separated | none |
 | `--consortia-from-plugin` | flag | off |
+| `--remove` | restore wrapped originals / delete canned `CODE-CI` | off |
 | `--services` | `sms`, `phone` (comma-separated) | `sms,phone` |
 | `--default-language` | `en`/`eng`, `es-ES`/`spa`, `fr-CA`/`fre` | `en` |
 | `--languages` | `default`, `en`, `es-ES`, `fr-CA` (comma-separated) | all four |

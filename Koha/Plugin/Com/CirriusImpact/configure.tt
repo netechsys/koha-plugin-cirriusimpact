@@ -196,9 +196,13 @@
     <fieldset>
       <legend>Install notice templates</legend>
       <p class="hint">
-        Install CirriusImpact-ready SMS/phone templates into Koha's <code>letter</code> table
-        (same as <code>install_message_templates.pl</code>). Matching rows are
-        <strong>overwritten</strong>. Save Branch services first if you use
+        <strong>Defaults</strong> and <strong>Consortia</strong> modes read each existing Koha
+        notice (<code>letter</code> row) and wrap its current text in CirriusImpact YAML
+        so the plugin can export it — they do <em>not</em> replace your wording with
+        canned CI sample text. Matching rows are <strong>overwritten</strong> with the
+        wrapped form. Notices that already contain <code>CirriusImpact: yes</code> are skipped.
+        <strong>CI templates</strong> still install canned sample notices as <code>CODE-CI</code>
+        only (stock codes unchanged). Save Branch services first if you use
         <em>consortia from plugin</em>. No Koha restart is required from this screen.
       </p>
       [% IF install_templates_log %]
@@ -215,25 +219,25 @@
           <div class="radio">
             <label>
               <input type="radio" name="install_mode" value="defaults" checked="checked">
-              Defaults — stock letter codes at system default (<code>branchcode=''</code>)
+              Defaults — wrap existing stock notices at system default (<code>branchcode=''</code>)
             </label>
           </div>
           <div class="radio">
             <label>
               <input type="radio" name="install_mode" value="ci-templates">
-              CI templates — create <code>CODE-CI</code> only; leave stock codes alone
+              CI templates — install canned sample notices as <code>CODE-CI</code> only (does not change stock)
             </label>
           </div>
           <div class="radio">
             <label>
               <input type="radio" name="install_mode" value="consortia-from-plugin">
-              Consortia from plugin — branch-scoped rows for every branch with a service enabled above
+              Consortia from plugin — wrap existing notices for every branch with a service enabled above
             </label>
           </div>
           <div class="radio">
             <label>
               <input type="radio" name="install_mode" value="consortia-branch">
-              Consortia branches — same letter codes, specific Koha branchcodes
+              Consortia branches — wrap existing notices for specific Koha branchcodes
             </label>
           </div>
         </div>
@@ -298,6 +302,59 @@
 
         <button type="submit" class="btn btn-warning">Install templates</button>
       </form>
+
+      <hr style="margin: 1.25em 0;"/>
+      <p class="hint">
+        <strong>Remove / revert</strong> undoes an install for the same mode selection above:
+        Defaults and Consortia restore the archived original notice text (from the hidden
+        <code>[%# Original Notice Template %]</code> block). CI templates deletes the
+        canned <code>CODE-CI</code> sample rows. Use the same Services / Languages / branch
+        filters as install.
+      </p>
+      <form method="get" style="margin-bottom: 0.5em;" id="ci-remove-templates-form"
+            onsubmit="return confirm('Remove/revert CirriusImpact notice templates now? This cannot be undone without a backup.');">
+        <input type="hidden" name="class" value="[% CLASS %]"/>
+        <input type="hidden" name="method" value="[% METHOD %]"/>
+        <input type="hidden" name="remove_templates" value="1"/>
+        <!-- Mirror mode/services/langs/branches from install form via JS before submit -->
+        <div id="ci-remove-mirror-fields"></div>
+        <div class="checkbox">
+          <label>
+            <input type="checkbox" name="remove_templates_confirm" value="1">
+            I understand this will <strong>revert or delete</strong> matching CirriusImpact notice templates
+          </label>
+        </div>
+        <button type="submit" class="btn btn-danger">Remove / revert templates</button>
+      </form>
+      <script>
+        (function () {
+          var installForm = document.getElementById('ci-install-templates-form');
+          var removeForm = document.getElementById('ci-remove-templates-form');
+          var mirror = document.getElementById('ci-remove-mirror-fields');
+          if (!installForm || !removeForm || !mirror) return;
+          removeForm.addEventListener('submit', function () {
+            mirror.innerHTML = '';
+            var names = [
+              'install_mode', 'install_svc_sms', 'install_svc_phone',
+              'install_lang_default', 'install_lang_en', 'install_lang_es', 'install_lang_fr',
+              'install_default_language', 'install_consortia_branches', 'install_branch'
+            ];
+            names.forEach(function (name) {
+              var els = installForm.querySelectorAll('[name="' + name + '"]');
+              Array.prototype.forEach.call(els, function (el) {
+                if (el.type === 'radio' || el.type === 'checkbox') {
+                  if (!el.checked) return;
+                }
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = el.value;
+                mirror.appendChild(input);
+              });
+            });
+          });
+        })();
+      </script>
     </fieldset>
 
     <fieldset>

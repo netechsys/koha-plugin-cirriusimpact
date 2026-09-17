@@ -78,43 +78,73 @@ Manual Connection fields remain if CirriusImpact directs you not to use Claim. T
 
 ### 4. Install Message Templates (Recommended)
 
-**From Configure (preferred):** After saving Branch services, use **Install notice templates** on the plugin Configure page (mode, services, languages, confirm overwrite). No SSH required.
+**From Configure (preferred):** After saving Branch services, use **Install notice templates** on the plugin Configure page (mode, services, languages, confirm). No SSH required.
 
 **From CLI** (same installer), as the Koha instance user **after** Configure/Save (so `--consortia-from-plugin` can read enabled branches):
 
 ```bash
 sudo koha-shell INSTANCE -c \
-  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --no-restart'
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --no-restart'
 ```
 
 #### Install modes (pick one)
 
-| Mode | What it writes | When to use |
+| Mode | What it does | When to use |
 |------|----------------|-------------|
-| `--defaults` (default) | Stock letter `CODE` at `branchcode=''` | Single-library sites |
-| `--ci-templates` | `CODE-CI` only (`CHECKOUT-CI`, `HOLD-CI`, …); stock left alone | CI members use alternate letter codes |
-| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped `letter.branchcode` | Consortia; Koha prefers branch templates |
-| `--consortia-from-plugin` | Same as `--consortia-branch` for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
+| `--defaults` (default) | **Wrap** existing stock letters at `branchcode=''` in CirriusImpact YAML (keeps your wording) | Single-library / system-default notices |
+| `--ci-templates` | Install **canned** samples as `CODE-CI` only; stock codes unchanged | Optional samples / alternate codes only |
+| `--consortia-branch=CPL[,UPL…]` | **Wrap** existing letters for those Koha `branchcode`s | Consortia; Koha prefers branch templates |
+| `--consortia-from-plugin` | Same wrap for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
 
-**Important:** `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL` or `CHECKOUT-KDEMO_CPL`. Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
+**Important:** `--consortia-branch=CPL` updates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL`. Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
 
-The plugin export path recognizes both stock codes and `*-CI` variants.
+**Defaults / Consortia wrap format** (SMS example):
 
-#### What gets installed
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "<existing notice text from Koha>"
+---
+[%# Original Notice Template %]
+[%# ...archived original lines... %]
+```
 
-- **19 notice codes** × **2 transports** (SMS + phone) when both services are selected
-- **4 language rows** per template by default: `default`, `en`, `es-ES`, `fr-CA`
-- Koha's **Default** tab (`letter.lang=default`) is filled from `--default-language` (English by default)
-- SMS bodies use GSM-7-safe ASCII; see `TEMPLATE_I18N.md` for multilingual and character-budget notes
+Phone notices use `call: script:` instead of `sms: text:`. Notices that already contain `CirriusImpact: yes` are skipped. Rows with no existing text are skipped (nothing to wrap).
+
+#### Remove / revert
+
+Undo a prior install with the same mode / services / languages / branches:
+
+- **Configure:** **Remove / revert templates** (confirm checkbox)
+- **CLI:** add `--remove`
+
+| Mode | Remove behavior |
+|------|-----------------|
+| Defaults / Consortia | Restore archived original notice text from the TT comment block (fallback: YAML `text` / `script` body) |
+| CI templates | **Delete** matching canned `CODE-CI` letter rows |
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --remove --no-restart'
+```
+
+#### What gets touched
+
+- Template codes covered by the installer catalog (HOLD, CHECKIN, CHECKOUT, ODUE, …) × selected transports (SMS / phone)
+- Selected `letter.lang` rows: `default`, `en`, `es-ES`, `fr-CA` (as chosen)
+- Koha's **Default** tab (`letter.lang=default`) uses `--default-language` content when installing **canned** CI templates; wrap modes use whatever text is already in that language row
 
 #### Command-line options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install mode (see above) | `--defaults` if none given |
-| `--services=sms,phone` | Which transports to install (`sms` and/or `phone`) | both |
-| `--default-language=…` | Language content for Koha's Default tab | `en` |
-| `--languages=…` | Which `letter.lang` rows to write | `default,en,es-ES,fr-CA` |
+| `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install (or with `--remove`, revert) mode | `--defaults` if none given |
+| `--remove` | Revert wrapped notices / delete `CODE-CI` samples for the selected mode | off |
+| `--services=sms,phone` | Which transports to process (`sms` and/or `phone`) | both |
+| `--default-language=…` | Language content for Koha's Default tab (canned CI templates) | `en` |
+| `--languages=…` | Which `letter.lang` rows to process | `default,en,es-ES,fr-CA` |
 | `--no-restart` | Skip the interactive Koha restart prompt | off |
 
 `--transports` is accepted as an alias for `--services`.

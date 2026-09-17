@@ -1,3 +1,15 @@
+## 1.3.4 - 2026-09-17
+
+### Defaults wrap existing notices + Remove/revert
+- **CHANGED:** Defaults and Consortia install modes **wrap** existing Koha `letter` text in CirriusImpact YAML (preserve library wording) instead of replacing with canned samples; archive original as `[%# Original Notice Template %]` comments.
+- **ADDED:** Configure **Remove / revert templates** and CLI `--remove` (restore wrapped originals; delete canned `CODE-CI` samples).
+- **DOCS:** INSTALL / QUICKSTART / RELEASE_NOTES_v1.3.4 updated.
+
+## 1.3.3 - 2026-09-17
+
+### Defaults wrap (interim)
+- Wrap-existing Defaults/Consortia behavior; superseded the same day by **1.3.4** (adds remove/revert).
+
 ## 1.3.2 - 2026-08-03
 
 ### Install notice templates from Configure UI

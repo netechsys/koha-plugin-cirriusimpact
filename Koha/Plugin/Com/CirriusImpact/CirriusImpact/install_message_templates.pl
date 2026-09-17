@@ -26,6 +26,7 @@ my $services_opt;
 my $do_defaults = 0;
 my $do_ci_templates = 0;
 my $do_from_plugin = 0;
+my $do_remove = 0;
 my @consortia_branch_opts;
 my $lang_opt;
 
@@ -38,10 +39,12 @@ GetOptions(
     'ci-templates!'            => \$do_ci_templates,
     'consortia-branch=s'       => \@consortia_branch_opts,
     'consortia-from-plugin!'   => \$do_from_plugin,
+    'remove!'                  => \$do_remove,
     'no-restart'               => \$no_restart,
 ) or die <<"EOF";
 Usage: $0 [install mode...] [options]
   --defaults / --ci-templates / --consortia-branch=CODE / --consortia-from-plugin
+  --remove  (revert wrapped notices / delete CODE-CI samples for selected modes)
   --services=sms,phone --default-language=en --languages=default,en,es-ES,fr-CA --no-restart
 EOF
 
@@ -62,16 +65,19 @@ if ($do_from_plugin) {
     };
 }
 
-my $result = Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run(
-    defaults             => $do_defaults,
-    ci_templates         => $do_ci_templates,
-    consortia_branches   => \@branches,
+my %run = (
+    defaults              => $do_defaults,
+    ci_templates          => $do_ci_templates,
+    consortia_branches    => \@branches,
     consortia_from_plugin => $do_from_plugin,
-    services             => $services_opt,
-    languages            => $lang_opt,
-    default_language     => $default_language_opt,
-    plugin               => $plugin,
+    services              => $services_opt,
+    languages             => $lang_opt,
+    default_language      => $default_language_opt,
+    plugin                => $plugin,
 );
+my $result = $do_remove
+  ? Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run_remove(%run)
+  : Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run(%run);
 
 print $result->{log} // '';
 if ( $result->{error} ) {

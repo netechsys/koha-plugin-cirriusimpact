@@ -51,7 +51,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.2";
+our $VERSION = "1.3.4";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -119,6 +119,17 @@ sub configure {
     }
     elsif ( $cgi->param('install_templates') ) {
         my ( $ok, $msg, $log ) = $self->_ci_configure_install_templates($cgi);
+        my $template = $self->get_template({ file => 'configure.tt' });
+        $template->param( $self->_ci_configure_template_params(
+            claim_message          => $ok ? $msg : undef,
+            claim_error            => $ok ? undef : $msg,
+            install_templates_log  => $log,
+        ) );
+        $self->output_html($template->output());
+        return;
+    }
+    elsif ( $cgi->param('remove_templates') ) {
+        my ( $ok, $msg, $log ) = $self->_ci_configure_remove_templates($cgi);
         my $template = $self->get_template({ file => 'configure.tt' });
         $template->param( $self->_ci_configure_template_params(
             claim_message          => $ok ? $msg : undef,
@@ -269,6 +280,78 @@ sub _ci_configure_install_templates {
         return ( 1, $msg, $result->{log} // '' );
     }
     return ( 0, ( $result->{error} || 'Template install failed.' ), $result->{log} // '' );
+}
+
+# Configure UI: remove/revert CirriusImpact notice templates (undo wrap or delete CODE-CI).
+sub _ci_configure_remove_templates {
+    my ( $self, $cgi ) = @_;
+
+    unless ( scalar $cgi->param('remove_templates_confirm') ) {
+        return ( 0, 'Confirm the remove/revert checkbox before continuing.', '' );
+    }
+
+    my $mode = scalar $cgi->param('install_mode') // 'defaults';
+    $mode = 'defaults' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
+
+    my @services;
+    push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
+    push @services, 'phone' if scalar $cgi->param('install_svc_phone');
+    @services = ( 'sms', 'phone' ) unless @services;
+
+    my @languages;
+    push @languages, 'default' if scalar $cgi->param('install_lang_default');
+    push @languages, 'en'      if scalar $cgi->param('install_lang_en');
+    push @languages, 'es-ES'   if scalar $cgi->param('install_lang_es');
+    push @languages, 'fr-CA'   if scalar $cgi->param('install_lang_fr');
+    @languages = ( 'default', 'en', 'es-ES', 'fr-CA' ) unless @languages;
+
+    my @branches;
+    if ( $mode eq 'consortia-branch' ) {
+        my $raw = scalar $cgi->param('install_consortia_branches') // '';
+        for my $b ( split /,/, $raw ) {
+            $b =~ s/^\s+|\s+$//g;
+            push @branches, $b if length $b;
+        }
+        my @multi = $cgi->param('install_branch');
+        for my $b (@multi) {
+            next unless defined $b;
+            $b =~ s/^\s+|\s+$//g;
+            push @branches, $b if length $b;
+        }
+        {
+            my %seen;
+            @branches = grep { !$seen{$_}++ } @branches;
+        }
+        unless (@branches) {
+            return ( 0, 'Select or enter at least one Koha branchcode for consortia-branch mode.', '' );
+        }
+    }
+
+    my %run = (
+        defaults              => ( $mode eq 'defaults' ) ? 1 : 0,
+        ci_templates          => ( $mode eq 'ci-templates' ) ? 1 : 0,
+        consortia_from_plugin => ( $mode eq 'consortia-from-plugin' ) ? 1 : 0,
+        consortia_branches    => \@branches,
+        services              => \@services,
+        languages             => \@languages,
+        plugin                => $self,
+    );
+
+    my $result = eval {
+        require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
+        Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run_remove(%run);
+    };
+    if ($@) {
+        return ( 0, "Template remover failed to load: $@", '' );
+    }
+    unless ( $result && ref $result eq 'HASH' ) {
+        return ( 0, 'Template remover returned no result.', '' );
+    }
+    if ( $result->{ok} ) {
+        my $msg = "Removed/reverted $result->{count} notice template row(s).";
+        return ( 1, $msg, $result->{log} // '' );
+    }
+    return ( 0, ( $result->{error} || 'Template remove/revert failed.' ), $result->{log} // '' );
 }
 
 # POST library_id + token to public bootstrap claim API; apply SFTP + features.
