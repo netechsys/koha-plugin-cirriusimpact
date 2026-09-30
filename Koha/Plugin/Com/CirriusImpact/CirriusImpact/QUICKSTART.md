@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.4**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.5**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.4.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.5.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -209,6 +209,7 @@ sudo koha-shell INSTANCE -c \
 | `--consortia-branch` | Koha branchcode(s), repeatable / comma-separated | none |
 | `--consortia-from-plugin` | flag | off |
 | `--remove` | restore wrapped originals / delete canned `CODE-CI` | off |
+| `--upgrade` | rewrite untouched canned CirriusImpact notices to the current multi-item shape (add `--dry-run` to preview) | off |
 | `--services` | `sms`, `phone` (comma-separated) | `sms,phone` |
 | `--default-language` | `en`/`eng`, `es-ES`/`spa`, `fr-CA`/`fre` | `en` |
 | `--languages` | `default`, `en`, `es-ES`, `fr-CA` (comma-separated) | all four |
@@ -248,9 +249,11 @@ call:
 ---
 ```
 
+**Incremental vs all-at-once:** CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are built incrementally by Koha (header / `----` body / `----` footer, one body per event); PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE* are rendered all at once and must loop over `checkouts` / `overdues`. The plugin fills `{{ ci.titles }}` (SMS, `; `-separated), `{{ ci.titles_comma }}` (voice), and `{{ ci.due }}` from the collected ids and exports one CSV row with `; `-joined `itemsID` / `title`. See [RELEASE_NOTES_v1.3.5.md](RELEASE_NOTES_v1.3.5.md).
+
 #### HOLDDGST (Hold Digest) Notice Examples
 
-**Important:** HOLDDGST templates are designed for digest messages. The plugin automatically groups multiple individual HOLDDGST messages into single digest messages when patrons have digest preferences enabled.
+Koha builds HOLDDGST **incrementally**: each hold filled while the notice is pending appends the `----` body (one `- reserve_id`). The plugin sends one message listing every title.
 
 **SMS Transport:**
 ```yaml
@@ -258,7 +261,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]Hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]."
+  text: "[% branch.branchcode %]: Ready for pickup: {{ ci.titles }}. Pickup by {{ ci.due }}."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 ```
 
@@ -268,31 +275,29 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. You have [% IF holds && holds.size > 1 %][% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]a hold ready for pickup: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call 555-0100."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are ready for pickup: {{ ci.titles_comma }}. Pickup by {{ ci.due }}. Call [% branch.branchphone %]."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
-```
-
-**How Digest Grouping Works:**
-1. **Individual Messages**: Koha creates separate HOLDDGST messages for each hold
-2. **Plugin Grouping**: Plugin automatically groups messages by patron and transport type
-3. **Combined Output**: Multiple titles combined with semicolons (e.g., "The poems; Learning SQL")
-4. **Updated Message Text**: Message content updated to show digest format
-5. **CSV Result**: Single digest message instead of multiple individual messages
-
-**Example CSV Output:**
-```csv
-S,default,HOLDDGST,,01234567890,Mr.,Yossi,Teichman,555-0101,example1@example.com,CPL,Centerville,1,2025-10-13,The poems; Learning SQL,,,,,52,,64,1,,,CPL: You have 2 holds ready for pickup: The poems; Learning SQL. Pickup by 10/20/2025.
 ```
 
 #### CHECKOUT Notice Examples
 
+Koha builds CHECKOUT **incrementally**: each checkout appends the body between the `----` lines. Nothing but the id line may go between the markers.
+
 **SMS Transport:**
 ```yaml
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkouts.size > 1 %]Checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]Checked out: [% biblio.title %]. Due [% checkout.date_due | $KohaDates %][% END %]"
+  text: "[% branch.branchcode %]: Checked out: {{ ci.titles }}. Due {{ ci.due }}."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 ```
 
@@ -302,21 +307,142 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF checkouts.size > 1 %]You checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]You checked out [% biblio.title %] due [% checkout.date_due | $KohaDates %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You checked out: {{ ci.titles_comma }}. Due {{ ci.due }}. Thank you!"
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
+---
+```
+
+#### CHECKIN (Item Returned) Notice Examples
+
+Koha builds CHECKIN **incrementally** from `old_issues`, so the body uses `old_checkout.issue_id` under `old_checkouts:`.
+
+**SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Checked in: {{ ci.titles }}. Thank you!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
+---
+```
+
+**Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items were checked in: {{ ci.titles_comma }}. Thank you!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
+---
+```
+
+#### RENEWAL (Item Renewed) Notice Examples
+
+Koha builds RENEWAL **incrementally** (requires the **RenewalSendNotice** system preference).
+
+**SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+sms:
+  text: "[% branch.branchcode %]: Renewed: {{ ci.titles }}. New due date: {{ ci.due }}. Call [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
+---
+```
+
+**Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+call:
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items have been renewed: {{ ci.titles_comma }}. The new due date is {{ ci.due }}. Call [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
+---
+```
+
+#### PREDUEDGST (Due Soon Digest) Notice Examples
+
+Koha renders PREDUEDGST **all at once** (`advance_notices.pl`) and passes every item as `checkouts`; loop over it for titles and due dates.
+
+**SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+sms:
+  text: "[% branch.branchcode %]: Reminder - due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
+---
+```
+
+**Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+call:
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that the following items are due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
+---
+```
+
+#### DUEDGST (Due Today Digest) Notice Examples
+
+Same as PREDUEDGST, for items due today.
+
+**SMS Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+sms:
+  text: "[% branch.branchcode %]: Due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
+---
+```
+
+**Phone Transport:**
+```yaml
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+call:
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 ```
 
 #### ODUE (Overdue) Notice Examples
-**Important:** This is for ODUE.  If you want to have the multiple levels of ODUE messaging, create ODUE2 and ODUE3 Circulation Notices and customize accordingly.  Once all ODUE notices are defined, verify your Overdue notice/status triggers (** More > Tools > Overdue notice/status triggers **) are configured correctly to use these templates created.
 
+Koha renders ODUE **all at once** (`overdue_notices.pl`) and passes the patron's overdue items as `overdues`. ODUE2 / ODUE3 use the same shape; verify **Tools > Overdue notice/status triggers** point to these letters.
 
 **SMS Transport:**
 ```yaml
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %] OVERDUE: [% biblio.title %] due [% issue.date_due | $KohaDates %]. Return now!"
+  text: "[% branch.branchcode %]: Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 ```
 
@@ -325,22 +451,24 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Overdue: [% biblio.title %] due [% issue.date_due | $KohaDates %]. Return immediately. 555-0100."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
 ---
 ```
 
-**Note:** ODUE templates use single-item format. Koha generates one message per overdue item. Use ODUE, ODUE2, ODUE3 letter codes for different notice levels.
+#### AUTO_RENEWALS_DGST (Auto-renewal Digest) Notice Examples
 
-#### CHECKIN (Item Returned) Notice Examples
+Koha renders AUTO_RENEWALS_DGST **all at once** (`automatic_renewals.pl`) with every renewal attempt as `checkouts`; `auto_renew_error` is set when an item could not be renewed.
 
 **SMS Transport:**
 ```yaml
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: The following items have been checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you."
+  text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
 ---
 ```
 
@@ -349,16 +477,13 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. The following item was checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
 ---
 ```
 
-**Note:** 
-- WhatsApp is configured as an SMS notice using the `whatsapp:` section.
-- CHECKIN notices automatically populate `itemsID`, `biblionumber`, `title`, and `date` fields by extracting the title from the rendered message and matching it to recent check-ins in the database (last 24 hours).
-
-#### PREDUE (Upcoming Due) Notice Examples
+#### PREDUE (Single Item) Notice Examples
 
 **PREDUE (Single Item) - SMS Transport:**
 ```yaml
@@ -380,30 +505,7 @@ call:
 ---
 ```
 
-**PREDUEDGST (Digest) - SMS Transport:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-sms:
-  text: "[% branch.branchcode %]: [% IF issues && issues.size > 1 %][% issues.size %] items due soon: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Due [% issues.0.date_due | $KohaDates %][% ELSIF issues && issues.size == 1 %][% issues.0.biblio.title %] is due [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] is due [% issue.date_due | $KohaDates %][% END %]. Please return or renew."
----
-```
-
-**PREDUEDGST (Digest) - Phone Transport:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF issues && issues.size > 1 %]You have [% issues.size %] items due soon: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Due [% issues.0.date_due | $KohaDates %][% ELSIF issues && issues.size == 1 %][% issues.0.biblio.title %] is due [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] is due [% issue.date_due | $KohaDates %][% END %]. Please return or renew. Call 555-0100."
----
-```
-
-**Note:** 
-- PREDUE notices automatically populate `itemsID`, `biblionumber`, `title`, and `date` by matching the **rendered** SMS/phone text to the patron's upcoming due items (v1.1.46+). Each individual PREDUE row gets the item named in `messageText`, not always the earliest-due item.
-- For digest messages (PREDUEDGST), the message text will show all items even if the template variables are empty.
-- Use `advance_notices.pl` to generate PREDUE messages: `/usr/share/koha/bin/cronjobs/advance_notices.pl -c -v`
+**Note:** Use `advance_notices.pl` to generate PREDUE / PREDUEDGST / DUEDGST messages: `/usr/share/koha/bin/cronjobs/advance_notices.pl -c -v`
 
 #### Additional Message Types
 
@@ -524,46 +626,6 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you! Call 555-0100."
----
-```
-
-**RENEWAL (Item Renewed) - SMS:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-sms:
-  text: "[% branch.branchcode %]: [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]."
----
-```
-
-**RENEWAL (Item Renewed) - Phone:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %]. Call 555-0100."
----
-```
-
-**RENEWALGST (Item Renewed - Digest) - SMS:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-sms:
-  text: "[% branch.branchcode %]: [% IF issues && issues.size > 1 %][% issues.size %] items have been renewed: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. New due date: [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %][% END %]."
----
-```
-
-**RENEWALGST (Item Renewed - Digest) - Phone:**
-```yaml
----
-CirriusImpact: yes
-patron: [% borrowernumber %]
-call:
-  script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF issues && issues.size > 1 %][% issues.size %] items have been renewed: [% FOREACH i IN issues %][% i.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. New due date: [% issues.0.date_due | $KohaDates %][% ELSE %][% biblio.title %] has been renewed. New due date: [% issue.date_due | $KohaDates %][% END %]. Call 555-0100."
 ---
 ```
 

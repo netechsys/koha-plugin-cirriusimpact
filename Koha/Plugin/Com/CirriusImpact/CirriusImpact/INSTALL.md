@@ -130,6 +130,20 @@ sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --remove --no-restart'
 ```
 
+#### Upgrading templates (v1.3.5+)
+
+Uploading a newer KPZ runs the plugin upgrade, which rewrites **untouched** canned CirriusImpact notices to the current multi-item shape (CHECKOUT, CHECKIN, RENEWAL, HOLDDGST, PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST, ODUE, ODUE2, ODUE3; all languages, `CODE-CI` and branch rows).
+
+- Wrapped notices (Defaults / Consortia) keep the library's own text and are not changed.
+- Locally edited CirriusImpact notices are not changed; Configure lists them under **Notice templates need review**. See [TEMPLATE_I18N.md](TEMPLATE_I18N.md#multi-item-notices-v135) for the required shapes.
+
+Preview or re-run by hand:
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --upgrade --dry-run --no-restart'
+```
+
 #### What gets touched
 
 - Template codes covered by the installer catalog (HOLD, CHECKIN, CHECKOUT, ODUE, …) × selected transports (SMS / phone)
@@ -142,6 +156,7 @@ sudo koha-shell INSTANCE -c \
 |--------|-------------|---------|
 | `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install (or with `--remove`, revert) mode | `--defaults` if none given |
 | `--remove` | Revert wrapped notices / delete `CODE-CI` samples for the selected mode | off |
+| `--upgrade` / `--dry-run` | Rewrite untouched canned CirriusImpact notices to the current multi-item shape (preview with `--dry-run`) | off |
 | `--services=sms,phone` | Which transports to process (`sms` and/or `phone`) | both |
 | `--default-language=…` | Language content for Koha's Default tab (canned CI templates) | `en` |
 | `--languages=…` | Which `letter.lang` rows to process | `default,en,es-ES,fr-CA` |

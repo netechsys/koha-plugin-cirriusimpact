@@ -1,3 +1,16 @@
+## 1.3.5 - 2026-09-30
+
+### Multi-item notices (incremental vs all-at-once)
+- **CHANGED:** CHECKOUT, CHECKIN, RENEWAL and HOLDDGST templates use Koha's incremental `----` header/body/footer layout: each event appends one id (`checkouts:` / `old_checkouts:` / `holds:`), and the plugin renders all items into one SMS/call via `{{ ci.titles }}`, `{{ ci.titles_comma }}`, `{{ ci.due }}`.
+- **CHANGED:** PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE/ODUE2/ODUE3 templates loop over Koha's `checkouts` / `overdues` objects (titles and due dates for every item).
+- **CHANGED:** Multi-item notices export one CSV row with `; `-joined `itemsID` / `title`.
+- **ADDED:** Plugin upgrade rewrites untouched canned CirriusImpact templates (all versions since v1.1.43, all languages, `CODE-CI` and branch rows); locally edited rows are left alone and listed on Configure. CLI `install_message_templates.pl --upgrade [--dry-run]`.
+- **ADDED:** DUEDGST SMS/voice templates; `DUE` / `DUEDGST` notices are exported.
+- **FIXED:** ODUE/ODUE2/ODUE3 (and `-CI` variants) exported even without matching `overduerules`.
+- **FIXED:** AUTO_RENEWALS_DGST template used a nonexistent `auto_renewals` object.
+- **FIXED:** `CirriusImpact_TEST_MODE` looped forever on pending messages.
+- **DOCS:** RELEASE_NOTES_v1.3.5, TEMPLATE_I18N, BYWATER_SUPPORTED_NOTICES, NOTIFICATION_TYPES, INSTALL, QUICKSTART.
+
 ## 1.3.4 - 2026-09-17
 
 ### Defaults wrap existing notices + Remove/revert

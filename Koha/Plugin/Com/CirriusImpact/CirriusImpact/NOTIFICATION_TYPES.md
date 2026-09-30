@@ -25,7 +25,7 @@ my $level = $result->{level}; # Returns 2
 | ODUE2        | 2     | Second overdue notice |
 | ODUE3        | 3     | Third overdue notice |
 | DUE          | 4     | Overdue notice (some sites use `DUE` instead of `ODUE` in overduerules) |
-| DUEDGST      | 4     | Overdue digest (if configured) |
+| DUEDGST      | 4     | Items due today (digest, `advance_notices.pl`) |
 
 ### Type 2: Hold Notices
 | Message Code | Level | Description |
@@ -64,6 +64,10 @@ my $level = $result->{level}; # Returns 2
 | MEMBERSHIP_RENEWED | 2 | Membership renewed |
 | WELCOME            | 3 | Welcome message |
 
+## Multi-item notices (v1.3.5)
+
+CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are built incrementally by Koha; PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE/ODUE2/ODUE3 are rendered all at once. Either way the plugin sends **one** SMS/call per notice listing every item and exports one CSV row (`itemsID` / `title` joined with `; `); `notificationType` / `notificationLevel` come from the letter code as above. Template shapes: [TEMPLATE_I18N.md](TEMPLATE_I18N.md#multi-item-notices-v135).
+
 ## Implementation
 
 The lookup table is implemented in `CirriusImpact.pm` as the `_get_notification_type_and_level()` function:
@@ -77,6 +81,8 @@ sub _get_notification_type_and_level {
         'ODUE'  => { type => 1, level => 1 },
         'ODUE2' => { type => 1, level => 2 },
         'ODUE3' => { type => 1, level => 3 },
+        'DUE'      => { type => 1, level => 4 },
+        'DUEDGST'  => { type => 1, level => 4 },
         
         # Hold Notices - Type 2
         'HOLD'              => { type => 2, level => 1 },

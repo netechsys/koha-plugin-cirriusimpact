@@ -27,6 +27,8 @@ my $do_defaults = 0;
 my $do_ci_templates = 0;
 my $do_from_plugin = 0;
 my $do_remove = 0;
+my $do_upgrade = 0;
+my $dry_run = 0;
 my @consortia_branch_opts;
 my $lang_opt;
 
@@ -40,11 +42,14 @@ GetOptions(
     'consortia-branch=s'       => \@consortia_branch_opts,
     'consortia-from-plugin!'   => \$do_from_plugin,
     'remove!'                  => \$do_remove,
+    'upgrade!'                 => \$do_upgrade,
+    'dry-run!'                 => \$dry_run,
     'no-restart'               => \$no_restart,
 ) or die <<"EOF";
 Usage: $0 [install mode...] [options]
   --defaults / --ci-templates / --consortia-branch=CODE / --consortia-from-plugin
   --remove  (revert wrapped notices / delete CODE-CI samples for selected modes)
+  --upgrade [--dry-run]  (rewrite untouched canned CirriusImpact notices to the current multi-item shape)
   --services=sms,phone --default-language=en --languages=default,en,es-ES,fr-CA --no-restart
 EOF
 
@@ -75,7 +80,9 @@ my %run = (
     default_language      => $default_language_opt,
     plugin                => $plugin,
 );
-my $result = $do_remove
+my $result = $do_upgrade
+  ? Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run_upgrade( dry_run => $dry_run )
+  : $do_remove
   ? Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run_remove(%run)
   : Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run(%run);
 

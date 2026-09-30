@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.4';
+our $VERSION = '1.3.5';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -250,83 +250,8 @@ sub _plugin_enabled_branches {
 #   dbh => $dbh,             # optional; defaults to C4::Context->dbh
 # )
 # returns { ok => 1|0, count => N, log => '...', error => '...' }
-sub run {
-    my (%opts) = @_;
-    my @log_lines;
-
-    my $default_language_opt = $opts{default_language} // 'en';
-    my $default_content_key = $DEFAULT_LANG_ALIASES{$default_language_opt};
-    unless ( defined $default_content_key ) {
-        return { ok => 0, count => 0, log => '', error => "Unknown default_language='$default_language_opt'" };
-    }
-
-    my @want_langs;
-    my @want_services;
-    eval {
-        @want_langs    = _resolve_languages( $opts{languages} );
-        @want_services = _resolve_services( $opts{services} );
-        1;
-    } or do {
-        my $err = $@ // 'option error';
-        chomp $err;
-        return { ok => 0, count => 0, log => '', error => $err };
-    };
-
-    my $do_defaults     = $opts{defaults} ? 1 : 0;
-    my $do_ci_templates = $opts{ci_templates} ? 1 : 0;
-    my @consortia_branches;
-    if ( ref $opts{consortia_branches} eq 'ARRAY' ) {
-        @consortia_branches = @{ $opts{consortia_branches} };
-    }
-    elsif ( defined $opts{consortia_branches} && length $opts{consortia_branches} ) {
-        @consortia_branches = split /,/, $opts{consortia_branches};
-    }
-    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
-    @consortia_branches = grep { length } @consortia_branches;
-
-    my $dbh = $opts{dbh};
-    unless ($dbh) {
-        eval {
-            require C4::Context;
-            $dbh = C4::Context->dbh;
-            1;
-        } or do {
-            return { ok => 0, count => 0, log => '', error => "Database unavailable: $@" };
-        };
-    }
-
-    if ( $opts{consortia_from_plugin} ) {
-        my @from_plugin = _plugin_enabled_branches( $opts{plugin}, $dbh, \@log_lines );
-        if (@from_plugin) {
-            _log( \@log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
-            push @consortia_branches, @from_plugin;
-        }
-        else {
-            _log( \@log_lines, "consortia_from_plugin: no concrete branches in enabled_branches (unset/*/empty)." );
-        }
-    }
-
-    {
-        my %seen;
-        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
-    }
-
-    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
-        $do_defaults = 1;
-        _log( \@log_lines, "No install mode given; assuming defaults." );
-    }
-
-    _log( \@log_lines, "CirriusImpact Message Template Installer" );
-    _log( \@log_lines, "Default letter.lang content: $default_content_key" );
-    _log( \@log_lines, "Services: " . join( ', ', @want_services ) );
-    _log( \@log_lines, "Languages: " . join( ', ', @want_langs ) );
-    my $modes = '';
-    $modes .= " defaults" if $do_defaults;
-    $modes .= " ci-templates" if $do_ci_templates;
-    $modes .= " consortia-branch=" . join( ',', @consortia_branches ) if @consortia_branches;
-    _log( \@log_lines, "Modes:$modes" );
-
-my %templates = (
+# Canned CirriusImpact templates (key => {module, code, transport, content => {lang => text}}).
+my %TEMPLATES = (
     'HOLD_SMS' => {
         module => 'reserves',
         code => 'HOLD',
@@ -405,7 +330,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %][% holds.size %] holds ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]Hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]."
+  text: "[% branch.branchcode %]: Ready for pickup: {{ ci.titles }}. Pickup by {{ ci.due }}."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -413,7 +342,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %]Tiene [% holds.size %] reservas listas: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Retire antes del [% holds.0.expirationdate | $KohaDates %][% ELSE %]Reserva lista: [% biblio.title %]. Retire antes del [% hold.expirationdate | $KohaDates %][% END %]."
+  text: "[% branch.branchcode %]: Listo para retirar: {{ ci.titles }}. Retire antes del {{ ci.due }}."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -421,7 +354,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %]Vous avez [% holds.size %] reserves pretes: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Retirer avant le [% holds.0.expirationdate | $KohaDates %][% ELSE %]Reserve prete: [% biblio.title %]. Retirer avant le [% hold.expirationdate | $KohaDates %][% END %]."
+  text: "[% branch.branchcode %]: Pret a retirer: {{ ci.titles }}. Retirer avant le {{ ci.due }}."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         },
@@ -436,7 +373,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Pickup by [% holds.0.expirationdate | $KohaDates %][% ELSE %]One item ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %][% END %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are ready for pickup: {{ ci.titles_comma }}. Pickup by {{ ci.due }}. Call [% branch.branchphone %]."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -444,7 +385,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% IF holds && holds.size > 1 %]Tiene [% holds.size %] reservas listas: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Retire antes del [% holds.0.expirationdate | $KohaDates %][% ELSE %]Tiene una reserva lista: [% biblio.title %]. Retire antes del [% hold.expirationdate | $KohaDates %][% END %]. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Listo para retirar: {{ ci.titles_comma }}. Retire antes del {{ ci.due }}. Llame al [% branch.branchphone %]."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -452,7 +397,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% IF holds && holds.size > 1 %]Vous avez [% holds.size %] reserves pretes: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Retirer avant le [% holds.0.expirationdate | $KohaDates %][% ELSE %]Vous avez une reserve prete: [% biblio.title %]. Retirer avant le [% hold.expirationdate | $KohaDates %][% END %]. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Pret a retirer: {{ ci.titles_comma }}. A retirer avant le {{ ci.due }}. Appelez le [% branch.branchphone %]."
+holds:
+----
+  - [% hold.reserve_id %]
+----
 ---
 },
         },
@@ -467,7 +416,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkouts.size > 1 %]Checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]Checked out: [% biblio.title %]. Due [% checkout.date_due | $KohaDates %][% END %]"
+  text: "[% branch.branchcode %]: Checked out: {{ ci.titles }}. Due {{ ci.due }}."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -475,7 +428,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkouts.size > 1 %]Prestamo de [% checkouts.size %] articulos: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Vencen [% checkouts.0.date_due | $KohaDates %][% ELSE %]Prestamo: [% biblio.title %]. Vence [% checkout.date_due | $KohaDates %][% END %]"
+  text: "[% branch.branchcode %]: Prestamo: {{ ci.titles }}. Vence {{ ci.due }}."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -483,7 +440,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkouts.size > 1 %]Pret de [% checkouts.size %] documents: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Echeance [% checkouts.0.date_due | $KohaDates %][% ELSE %]Pret: [% biblio.title %]. Echeance [% checkout.date_due | $KohaDates %][% END %]"
+  text: "[% branch.branchcode %]: Pret: {{ ci.titles }}. Echeance {{ ci.due }}."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         },
@@ -498,7 +459,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF checkouts.size > 1 %]You checked out [% checkouts.size %] items: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. All due [% checkouts.0.date_due | $KohaDates %][% ELSE %]You checked out [% biblio.title %] due [% checkout.date_due | $KohaDates %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You checked out: {{ ci.titles_comma }}. Due {{ ci.due }}. Thank you!"
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -506,7 +471,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% IF checkouts.size > 1 %]Prestamo de [% checkouts.size %] articulos: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Vencen [% checkouts.0.date_due | $KohaDates %][% ELSE %]Prestamo de [% biblio.title %] con vencimiento [% checkout.date_due | $KohaDates %][% END %]. Gracias!"
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Prestamo de: {{ ci.titles_comma }}. Vence {{ ci.due }}. Gracias!"
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -514,7 +483,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% IF checkouts.size > 1 %]Pret de [% checkouts.size %] documents: [% FOREACH c IN checkouts %][% c.item.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Echeance [% checkouts.0.date_due | $KohaDates %][% ELSE %]Pret de [% biblio.title %] echeance [% checkout.date_due | $KohaDates %][% END %]. Merci!"
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Pret de: {{ ci.titles_comma }}. Echeance {{ ci.due }}. Merci!"
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         },
@@ -529,7 +502,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkins.size > 1 %]Checked in [% checkins.size %] items: [% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Checked in: [% biblio.title %][% END %]. Thank you!"
+  text: "[% branch.branchcode %]: Checked in: {{ ci.titles }}. Thank you!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -537,7 +514,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkins.size > 1 %]Devolucion de [% checkins.size %] articulos: [% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Devolucion: [% biblio.title %][% END %]. Gracias!"
+  text: "[% branch.branchcode %]: Devolucion: {{ ci.titles }}. Gracias!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -545,7 +526,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% IF checkins.size > 1 %]Retour de [% checkins.size %] documents: [% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Retour: [% biblio.title %][% END %]. Merci!"
+  text: "[% branch.branchcode %]: Retour: {{ ci.titles }}. Merci!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         },
@@ -560,7 +545,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following item was checked in: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Thank you!"
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items were checked in: {{ ci.titles_comma }}. Thank you!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -568,7 +557,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Se devolvio: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Gracias!"
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Se devolvio: {{ ci.titles_comma }}. Gracias!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -576,7 +569,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Retour enregistre: [% IF checkins.size > 1 %][% FOREACH c IN checkins %][% c.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Merci!"
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Retour enregistre: {{ ci.titles_comma }}. Merci!"
+old_checkouts:
+----
+  - [% old_checkout.issue_id %]
+----
 ---
 },
         },
@@ -590,24 +587,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Atraso: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: En retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -621,24 +621,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have an overdue item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Tiene un articulo atrasado: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Tiene articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Document en retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -652,24 +655,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Second notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Second notice - Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: 2do aviso - Atraso: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve ya. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: 2do aviso - Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve ya. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: 2e avis - En retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez maintenant. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: 2e avis - En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez maintenant. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -683,24 +689,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have a seriously overdue item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return at your earliest convenience to avoid any additional fines. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have seriously overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return at your earliest convenience to avoid any additional fines. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Segundo aviso. Articulo atrasado: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve ya. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Segundo aviso. Articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve ya. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Deuxieme avis. Document en retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez maintenant. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Deuxieme avis. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez maintenant. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -714,24 +723,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Final notice - Overdue item: [% biblio.title %]. Due [% issue.date_due | $KohaDates %]. Please return to avoid additional charges. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Final notice - Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return to avoid additional charges. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Aviso final - Atraso: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve ya para evitar cargos. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Aviso final - Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve ya para evitar cargos. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Avis final - En retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Avis final - En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -745,24 +757,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is the final overdue notice for item: [% biblio.title %]. It was due [% issue.date_due | $KohaDates %]. Please return or renew at your earliest convenience to avoid any additional charges. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is the final overdue notice for: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience to avoid any additional charges. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Aviso final. Articulo atrasado: [% biblio.title %]. Vencio [% issue.date_due | $KohaDates %]. Devuelva o renueve ya para evitar cargos. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Aviso final. Articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve ya para evitar cargos. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Avis final. Document en retard: [% biblio.title %]. Echu le [% issue.date_due | $KohaDates %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Avis final. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -838,24 +853,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Reminder - due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Recordatorio - [% biblio.title %] vence [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Recordatorio - vencen pronto: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: Rappel - [% biblio.title %] echeance [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Rappel - echeance proche: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -869,24 +887,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that the following items are due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Recordatorio - [% biblio.title %] vence [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Recordatorio - vencen pronto: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Rappel - [% biblio.title %] echeance [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Rappel - echeance proche: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -922,6 +943,40 @@ sms:
 },
         },
     },
+    'DUEDGST_SMS' => {
+        module => 'circulation',
+        code => 'DUEDGST',
+        transport => 'sms',
+        content => {
+        'en' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+sms:
+  text: "[% branch.branchcode %]: Due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
+---
+},
+        'es-ES' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+sms:
+  text: "[% branch.branchcode %]: Vencen hoy: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
+---
+},
+        'fr-CA' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+sms:
+  text: "[% branch.branchcode %]: Echeance aujourd'hui: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
+---
+},
+        },
+    },
     'HOLD_CHANGED_PHONE' => {
         module => 'reserves',
         code => 'HOLD_CHANGED',
@@ -949,6 +1004,40 @@ CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Le statut de votre reserve a change pour [% biblio.title %]. Verifiez votre compte. Appelez le [% branch.branchphone %]."
+---
+},
+        },
+    },
+    'DUEDGST_PHONE' => {
+        module => 'circulation',
+        code => 'DUEDGST',
+        transport => 'phone',
+        content => {
+        'en' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+call:
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
+---
+},
+        'es-ES' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+call:
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Vencen hoy: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
+---
+},
+        'fr-CA' => q{
+---
+CirriusImpact: yes
+patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+call:
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Echeance aujourd'hui: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -1183,7 +1272,11 @@ email:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% biblio.title %] renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Renewed: {{ ci.titles }}. New due date: {{ ci.due }}. Call [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -1191,7 +1284,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% biblio.title %] renovado. Nueva fecha: [% issue.date_due | $KohaDates %]. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Renovado: {{ ci.titles }}. Nueva fecha: {{ ci.due }}. Llame [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -1199,7 +1296,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 sms:
-  text: "[% branch.branchcode %]: [% biblio.title %] renouvele. Nouvelle echeance: [% issue.date_due | $KohaDates %]. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Renouvele: {{ ci.titles }}. Nouvelle echeance: {{ ci.due }}. Appelez [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         },
@@ -1214,7 +1315,11 @@ sms:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% biblio.title %] has been renewed. The new due date is [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items have been renewed: {{ ci.titles_comma }}. The new due date is {{ ci.due }}. Call [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'es-ES' => q{
@@ -1222,7 +1327,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] fue renovado. Nueva fecha: [% issue.date_due | $KohaDates %]. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Se renovo: {{ ci.titles_comma }}. Nueva fecha: {{ ci.due }}. Llame al [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         'fr-CA' => q{
@@ -1230,7 +1339,11 @@ call:
 CirriusImpact: yes
 patron: [% borrowernumber %]
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] a ete renouvele. Nouvelle echeance: [% issue.date_due | $KohaDates %]. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement: {{ ci.titles_comma }}. Nouvelle echeance: {{ ci.due }}. Appelez le [% branch.branchphone %]."
+checkouts:
+----
+  - [% checkout.issue_id %]
+----
 ---
 },
         },
@@ -1306,24 +1419,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items auto renewed: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %] auto-renewed[% END %]. Call [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] articulos renovados auto: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Llame [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
-  text: "[% branch.branchcode %]: [% IF auto_renewals.size > 1 %][% auto_renewals.size %] documents renouvelees auto: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Appelez [% branch.branchphone %]."
+  text: "[% branch.branchcode %]: Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -1337,24 +1453,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] items have auto renewed. Please check your account for details[% ELSE %][% biblio.title %] has been auto renewed. The new due date is [% issue.date_due | $KohaDates %][% END %]. Call [% branch.branchphone %]."
+  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] articulos renovados automaticamente: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Llame al [% branch.branchphone %]."
+  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrowernumber %]
+checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% IF auto_renewals.size > 1 %][% auto_renewals.size %] documents renouvelees automatiquement: [% FOREACH renewal IN auto_renewals %][% renewal.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %][% biblio.title %][% END %]. Appelez le [% branch.branchphone %]."
+  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -1546,6 +1665,84 @@ call:
         },
     },
 );
+
+sub run {
+    my (%opts) = @_;
+    my @log_lines;
+
+    my $default_language_opt = $opts{default_language} // 'en';
+    my $default_content_key = $DEFAULT_LANG_ALIASES{$default_language_opt};
+    unless ( defined $default_content_key ) {
+        return { ok => 0, count => 0, log => '', error => "Unknown default_language='$default_language_opt'" };
+    }
+
+    my @want_langs;
+    my @want_services;
+    eval {
+        @want_langs    = _resolve_languages( $opts{languages} );
+        @want_services = _resolve_services( $opts{services} );
+        1;
+    } or do {
+        my $err = $@ // 'option error';
+        chomp $err;
+        return { ok => 0, count => 0, log => '', error => $err };
+    };
+
+    my $do_defaults     = $opts{defaults} ? 1 : 0;
+    my $do_ci_templates = $opts{ci_templates} ? 1 : 0;
+    my @consortia_branches;
+    if ( ref $opts{consortia_branches} eq 'ARRAY' ) {
+        @consortia_branches = @{ $opts{consortia_branches} };
+    }
+    elsif ( defined $opts{consortia_branches} && length $opts{consortia_branches} ) {
+        @consortia_branches = split /,/, $opts{consortia_branches};
+    }
+    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
+    @consortia_branches = grep { length } @consortia_branches;
+
+    my $dbh = $opts{dbh};
+    unless ($dbh) {
+        eval {
+            require C4::Context;
+            $dbh = C4::Context->dbh;
+            1;
+        } or do {
+            return { ok => 0, count => 0, log => '', error => "Database unavailable: $@" };
+        };
+    }
+
+    if ( $opts{consortia_from_plugin} ) {
+        my @from_plugin = _plugin_enabled_branches( $opts{plugin}, $dbh, \@log_lines );
+        if (@from_plugin) {
+            _log( \@log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
+            push @consortia_branches, @from_plugin;
+        }
+        else {
+            _log( \@log_lines, "consortia_from_plugin: no concrete branches in enabled_branches (unset/*/empty)." );
+        }
+    }
+
+    {
+        my %seen;
+        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
+    }
+
+    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
+        $do_defaults = 1;
+        _log( \@log_lines, "No install mode given; assuming defaults." );
+    }
+
+    _log( \@log_lines, "CirriusImpact Message Template Installer" );
+    _log( \@log_lines, "Default letter.lang content: $default_content_key" );
+    _log( \@log_lines, "Services: " . join( ', ', @want_services ) );
+    _log( \@log_lines, "Languages: " . join( ', ', @want_langs ) );
+    my $modes = '';
+    $modes .= " defaults" if $do_defaults;
+    $modes .= " ci-templates" if $do_ci_templates;
+    $modes .= " consortia-branch=" . join( ',', @consortia_branches ) if @consortia_branches;
+    _log( \@log_lines, "Modes:$modes" );
+
+    my %templates = %TEMPLATES;
 
 
     my $content_for_lang = sub {
@@ -1905,6 +2102,190 @@ sub run_remove {
             languages          => \@want_langs,
         },
     };
+}
+
+# Canned CirriusImpact templates shipped by v1.1.43 - v1.3.4 for the notices whose
+# shape changed in v1.3.5 (normalized content sha1 => "transport:content language").
+my %LEGACY_TEMPLATE_DIGESTS = (
+    AUTO_RENEWALS_DGST => {
+        '044a23192f1c0865206c9d3865a6330be449f9d8' => 'sms:fr-CA',
+        '28ea54e2f5f2c8cbf1313566f89964e7e23a3f73' => 'phone:fr-CA',
+        '293fbe8d809514f2da44f878e4331c08979ef135' => 'phone:en',
+        '55edd3f29dd4da4b3278fd078ea5226a0b9a9843' => 'sms:en',
+        '69ba41a8c8b5d8c35aa0cb7c7a6cfd49916523f6' => 'phone:en',
+        'b3ac36791ded6542aa6da34982e97af871875709' => 'phone:es-ES',
+        'e4fc64364ec5181d69745a8da6ede6a7c2e16b03' => 'sms:en',
+        'ee8a196fde3b146d15aaabc54fd26145aebcc053' => 'sms:es-ES',
+    },
+    CHECKIN => {
+        '22c133b5f7634fefdddc2509dd82e8a7bb104e35' => 'sms:fr-CA',
+        '4411f9af9e9001d57215cf8408b1c6c0ada222cc' => 'phone:en',
+        '44d4466a0e9287c16d9a240528644b944f60cb45' => 'sms:en',
+        '86faec4ffa2acf23137d0dd8cfb446d0a4ed1517' => 'phone:fr-CA',
+        '8a197997ddbcca78e68f7dd522da2b633676f5c8' => 'phone:en',
+        '8cb05aacc72a06492b155903dfa00720e2c413a3' => 'phone:es-ES',
+        'e1d28733912828f920118616b33b5de3b23c858b' => 'sms:es-ES',
+    },
+    CHECKOUT => {
+        '1718f474b26a2897c064ffca6cdfc99480d8f633' => 'phone:fr-CA',
+        '63e2ee36f0097b1c78928c8f75cbbdcff63fb5bd' => 'phone:es-ES',
+        '81184e21bf3f1534e9ed898b6cc82bef75d22079' => 'sms:es-ES',
+        'c0283493456e936a4393928bfdaec3943120230f' => 'sms:fr-CA',
+        'f255b485bea0febec76693b6ff4acc93638f7978' => 'sms:en',
+        'f6d7fed2d5c45029d33164c797a730218c4ccf23' => 'phone:en',
+        'fe438a53cdce26190e3db790d3ba697940f341c3' => 'phone:en',
+    },
+    HOLDDGST => {
+        '353651cf539d69ba4ef4e360f279061db8ae6bd6' => 'sms:en',
+        '71d33c72f7d0fe66d8eb91966ca6c683dcb7c581' => 'sms:fr-CA',
+        '79b5f26db7ffc74cd79ce05ab8de9a7f2d66e989' => 'phone:en',
+        '7b5a1157c1a75b12b773de97f1dcc6ef9bed12a1' => 'phone:fr-CA',
+        '97e1ae3892451ae3f2664ed43599fd93458e781e' => 'phone:es-ES',
+        'b85322ae17bfb86b7a36aff9095f59499c66729b' => 'sms:es-ES',
+        'cf7e531fee4d773022d77c45112c98a98fedb5bf' => 'sms:en',
+        'd808f7bf3fe12d2fa2160dbdaf858f46440d286a' => 'phone:en',
+    },
+    ODUE => {
+        '0c88f20f58204c591aa078f850157eec39d1be74' => 'phone:en',
+        '1143ae5e1a7b921271c54000abc7938deff2f332' => 'sms:en',
+        '62ef2f5f5c9d5b93a50a928f4d7290f3edddfb71' => 'phone:es-ES',
+        '90f1d30dc6b2f8c3d3f31759d3ac836886060d30' => 'sms:es-ES',
+        '95587b476caefa8adfeb8f4c17e63d3dd35ad952' => 'phone:fr-CA',
+        'b306b036f1ac64c1279cce80873b208061bd4a53' => 'sms:fr-CA',
+        'fd2cc5a8b33f104296d5abe6aee69141c5fdc10d' => 'phone:en',
+    },
+    ODUE2 => {
+        '0fa460ee9bec63a931037df5d2754ad355493165' => 'sms:fr-CA',
+        '31cc5fb4951f02ed85db12dd223ed8e50b52c041' => 'sms:en',
+        '4c591ec04aca47ecfd98f68451189b8538377632' => 'phone:en',
+        '55cc4a7de12770a73d2e59ff2f5498331e6b403f' => 'sms:es-ES',
+        '65c72a2afff1d6668032c613ff9bd2e08a8d77dc' => 'phone:es-ES',
+        '6e2d93ac33a9ada14c531c79e91a7a53c5385179' => 'phone:fr-CA',
+        'c8fd97805b43cab520ce74effc90c691fd211f6b' => 'phone:en',
+        'fb4de53424f58bb22ce42a1929c99c54385e4358' => 'sms:en',
+    },
+    ODUE3 => {
+        '17b0d2553523e48846e056501ab3105569cb32ac' => 'phone:es-ES',
+        '1c68c04e600ef64b39ddb284e94c0c52ce8dd12f' => 'sms:es-ES',
+        '260ebd69dea2c9fc2dcc7192a51311ab03168876' => 'sms:en',
+        '3474a2c92ec0aac48dc22da42c136f2f7c70c004' => 'phone:en',
+        '505740fe0feb7bfcfd5e68e97238218d0ab2c3bc' => 'phone:fr-CA',
+        '63f09d8a76b09313faea76bac77a35a09dd701a9' => 'phone:en',
+        '99eabd4aa94e1d15d70410b989567dbc12d20322' => 'sms:en',
+        'df8a54ba4b285fbe79459da1d6ad6b22bf55f885' => 'sms:fr-CA',
+    },
+    PREDUEDGST => {
+        '146385dbe7a588b6ebeeb7605cac3dd46999c8c8' => 'phone:en',
+        '3eca8cb396e8a0e1cce29143a81f4510ce4be5c8' => 'sms:en',
+        '54e37d9d50beebd781a1650c999d881c3d9a2da6' => 'phone:en',
+        '56686d2a8064a82137bc2ecca8612bbaa3b47438' => 'sms:fr-CA',
+        '575e9466e14e1f471b02a273c5de7b3eaa4be5e3' => 'phone:es-ES',
+        '7c724a03c61cca765b174207fbd2da97f53b23af' => 'phone:fr-CA',
+        'a2e1dbcec1b8e28686592d09a2981ba6ab53a8ba' => 'sms:es-ES',
+        'acd781ebbfda1d5ea4673ce47dd2bc6a9ff63009' => 'sms:en',
+    },
+    RENEWAL => {
+        '4f68db2e59a310d4b24d359f69f6ac1bf379441c' => 'phone:es-ES',
+        '5833cda3600597ef9204bab2b651d8e30607c88c' => 'phone:en',
+        '5c9f10a7d3763424900616c5c1f8a04cfd3fcae1' => 'phone:en',
+        '78121e2ca1f2e3c82ab7bc0e0f870c5a3527510a' => 'sms:es-ES',
+        '7defdef9b9d83f83e1ad428628dd3bdc29c0e05d' => 'sms:en',
+        'a7a41d8ce5d64351549d0fa9442c3ecf27eaa583' => 'sms:fr-CA',
+        'aadaf2db3ba3ba50534c534458556cb565f079a2' => 'phone:fr-CA',
+    },
+);
+
+sub _normalize_for_digest {
+    my ($s) = @_;
+    $s = '' unless defined $s;
+    $s =~ s/\r//g;
+    $s =~ s/[ \t]+$//mg;
+    $s =~ s/\A\s+//;
+    $s =~ s/\s+\z//;
+    return $s;
+}
+
+sub _content_digest {
+    my ($content) = @_;
+    require Digest::SHA;
+    require Encode;
+    my $norm = _normalize_for_digest($content);
+    $norm = Encode::encode_utf8($norm) if utf8::is_utf8($norm);
+    return Digest::SHA::sha1_hex($norm);
+}
+
+# Plugin upgrade: rewrite untouched canned CirriusImpact templates (stock codes,
+# CODE-CI and branch rows) to the v1.3.5 multi-item shape. Rows wrapping the
+# library's own notice are left alone; hand-edited CirriusImpact rows are reported.
+#
+# run_upgrade(dbh => $dbh, dry_run => 0|1)
+# Returns { ok, updated => N, customized => [ "CODE/transport/lang/branch", ... ], log, error }
+sub run_upgrade {
+    my (%opts) = @_;
+    my @log_lines;
+    my $dbh = $opts{dbh};
+    unless ($dbh) {
+        eval { require C4::Context; $dbh = C4::Context->dbh; 1 }
+          or return { ok => 0, updated => 0, customized => [], log => '', error => "Database unavailable: $@" };
+    }
+
+    my ( %new_template, %current_digest );
+    for my $tpl ( values %TEMPLATES ) {
+        next unless $LEGACY_TEMPLATE_DIGESTS{ $tpl->{code} } || $tpl->{code} eq 'DUEDGST';
+        $new_template{ $tpl->{code} }{ $tpl->{transport} } = $tpl;
+        $current_digest{ $tpl->{code} }{ _content_digest($_) } = 1 for values %{ $tpl->{content} };
+    }
+
+    my ( $updated, @customized );
+    my $ok = eval {
+        my $sth = $dbh->prepare(q{
+            SELECT id, module, code, branchcode, lang, message_transport_type, content
+            FROM letter
+            WHERE content LIKE '%CirriusImpact%'
+            ORDER BY code, message_transport_type, lang, branchcode
+        });
+        $sth->execute;
+        my $upd = $dbh->prepare(q{UPDATE letter SET content = ? WHERE id = ?});
+        while ( my $row = $sth->fetchrow_hashref ) {
+            my $content = $row->{content};
+            next unless _already_ci_yaml($content);
+            ( my $base = $row->{code} ) =~ s/-CI\z//;
+            next unless $new_template{$base};
+            my $label = join '/', $row->{code}, $row->{message_transport_type}, $row->{lang},
+              ( length( $row->{branchcode} // '' ) ? $row->{branchcode} : 'DEFAULT' );
+
+            next if $content =~ /Original Notice Template/;
+            my $digest = _content_digest($content);
+            next if $current_digest{$base}{$digest};
+
+            my $legacy = $LEGACY_TEMPLATE_DIGESTS{$base} ? $LEGACY_TEMPLATE_DIGESTS{$base}{$digest} : undef;
+            unless ($legacy) {
+                push @customized, $label;
+                _log( \@log_lines, "Customized (left unchanged, review for multi-item support): $label" );
+                next;
+            }
+            my ( undef, $lang ) = split /:/, $legacy, 2;
+            my $tpl = $new_template{$base}{ $row->{message_transport_type} };
+            my $new = $tpl ? $tpl->{content}{$lang} // $tpl->{content}{en} : undef;
+            unless ( defined $new && $new =~ /\S/ ) {
+                push @customized, $label;
+                _log( \@log_lines, "No v$VERSION template for $label; left unchanged" );
+                next;
+            }
+            $upd->execute( $new, $row->{id} ) unless $opts{dry_run};
+            $updated++;
+            _log( \@log_lines, ( $opts{dry_run} ? "Would update" : "Updated" ) . " $label [$lang]" );
+        }
+        1;
+    };
+    unless ($ok) {
+        my $err = $@ // 'upgrade failed';
+        chomp $err;
+        return { ok => 0, updated => $updated // 0, customized => \@customized, log => join( '', @log_lines ), error => $err };
+    }
+    _log( \@log_lines, "Template upgrade to v$VERSION: " . ( $updated // 0 ) . " row(s) updated, "
+          . scalar(@customized) . " customized row(s) need review" );
+    return { ok => 1, updated => $updated // 0, customized => \@customized, log => join( '', @log_lines ), error => '' };
 }
 
 1;

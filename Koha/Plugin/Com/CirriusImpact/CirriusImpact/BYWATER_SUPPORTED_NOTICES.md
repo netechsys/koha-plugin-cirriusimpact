@@ -1,7 +1,7 @@
 # CirriusImpact Koha Plugin — Supported Notice Types
 
-**Document date:** June 17, 2026  
-**Plugin release:** CirriusImpact **v1.2.2**  
+**Document date:** September 30, 2026  
+**Plugin release:** CirriusImpact **v1.3.5**  
 **Releases:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases  
 **Integration:** SMS (`commType=T`) and voice (`commType=V`) via CSV export + SFTP; Koha status lifecycle (`pending` → `transmitted` → `sent` / `failed` / `pending`)
 
@@ -34,7 +34,7 @@ Each CSV row also carries **`notificationLevel`** (`1`–`6`) for escalation wit
 
 ---
 
-## Fully supported notice codes (v1.2.2)
+## Fully supported notice codes (v1.3.5)
 
 ### Type 1 — Overdue
 
@@ -44,9 +44,9 @@ Each CSV row also carries **`notificationLevel`** (`1`–`6`) for escalation wit
 | **ODUE2** | 1 | 2 | Second overdue notice |
 | **ODUE3** | 1 | 3 | Third overdue notice |
 | **DUE** | 1 | 4 | Overdue notice (custom letter code, e.g. site-specific `overduerules`) |
-| **DUEDGST** | 1 | 4 | Overdue digest (if configured at a site) |
+| **DUEDGST** | 1 | 4 | Items due today (digest from `advance_notices.pl`) |
 
-**Note:** The plugin also loads **any** letter configured in Koha `overduerules` (`letter1` / `letter2` / `letter3`). Only codes listed above (or added to `notification_mapping.yml`) export with a valid `notificationType`. Unmapped overdue letters are exported with a blank `notificationType` and **rejected by CirriusImpact**.
+**Note:** ODUE / ODUE2 / ODUE3 (and `-CI` variants) are always selected. The plugin also loads **any** letter configured in Koha `overduerules` (`letter1` / `letter2` / `letter3`). Only codes listed above (or added to `notification_mapping.yml`) export with a valid `notificationType`. Unmapped overdue letters are exported with a blank `notificationType` and **rejected by CirriusImpact**.
 
 ---
 
@@ -86,6 +86,8 @@ Each CSV row also carries **`notificationLevel`** (`1`–`6`) for escalation wit
 
 **Plugin behavior (v1.2.2):** Multi-item PREDUE exports match `itemsID` / `title` to each row’s `messageText`.
 
+**Templates (v1.3.5):** PREDUEDGST / DUEDGST loop over Koha’s `checkouts` object, so every item and due date is listed.
+
 ---
 
 ### Type 5 — Renewal
@@ -119,6 +121,20 @@ Each CSV row also carries **`notificationLevel`** (`1`–`6`) for escalation wit
 | Renewal | 3 |
 | Membership | 3 |
 | **Total** | **22** |
+
+---
+
+## Multi-item notices (v1.3.5)
+
+Koha builds multi-item notices in two ways (see Springshare’s [incremental vs all-at-once notes](https://github.com/springshare/koha-plugin-webhook-notifications#notices-that-koha-builds-incrementally-vs-all-at-once)); v1.3.5 templates follow both:
+
+| Koha builds | Notices | Template |
+|-------------|---------|----------|
+| Incrementally (header / `----` body / `----` footer; one body appended per event) | CHECKOUT, CHECKIN, RENEWAL, HOLDDGST | Header declares `checkouts:` / `old_checkouts:` / `holds:`; body is one `- [% checkout.issue_id %]` (CHECKIN `old_checkout.issue_id`, HOLDDGST `hold.reserve_id`) |
+| All at once (cron) | PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST | `[% FOREACH c IN checkouts %]…[% END %]` |
+| All at once (cron) | ODUE, ODUE2, ODUE3 | `[% FOREACH o IN overdues %]…[% END %]` |
+
+The plugin resolves the ids and sends **one** SMS/call listing every title (and due / pickup-by dates); the CSV row carries `; `-joined `itemsID` / `title`. Plugin upgrade rewrites untouched canned templates automatically and lists locally edited ones on Configure. Details: `RELEASE_NOTES_v1.3.5.md`.
 
 ---
 
@@ -162,15 +178,16 @@ Please confirm:
 
 ---
 
-## Reference files (v1.2.2)
+## Reference files (v1.3.5)
 
 | File | Role |
 |------|------|
 | `notification_mapping.yml` | Koha letter code → CirriusImpact type/level |
 | `CirriusImpact.pm` → `before_send_messages` | Notice selection and CSV export |
 | `NOTIFICATION_TYPES.md` | In-plugin documentation of mappings |
-| `RELEASE_NOTES_v1.3.1.md` | Current production release notes |
+| `RELEASE_NOTES_v1.3.5.md` | Current production release notes |
+| `TEMPLATE_I18N.md` | Template shapes (incremental vs all-at-once) and installer |
 
 ---
 
-**Install package:** `koha-plugin-cirriusimpact-v1.2.2.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+**Install package:** `koha-plugin-cirriusimpact-v1.3.5.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)

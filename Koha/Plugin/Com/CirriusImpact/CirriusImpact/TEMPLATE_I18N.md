@@ -58,6 +58,28 @@ Optional: `--languages=default,en,es-ES,fr-CA` to limit which `letter.lang` rows
 
 Requires **TranslateNotices** = On. Add `en` / `es-ES` / `fr-CA` to **OPACLanguages** (and install language packs) so patrons can select those languages and notice tabs appear.
 
+## Multi-item notices (v1.3.5)
+
+Koha builds some notices incrementally and others all at once; templates must match (details and examples in [RELEASE_NOTES_v1.3.5.md](RELEASE_NOTES_v1.3.5.md)).
+
+| Koha builds | Notices | Template shape |
+|-------------|---------|----------------|
+| Incrementally (one body appended per event) | CHECKOUT, CHECKIN, RENEWAL, HOLDDGST | Header ends with an empty list key (`checkouts:` / `old_checkouts:` / `holds:`), body between `----` lines is `  - [% checkout.issue_id %]` (CHECKIN `old_checkout.issue_id`, HOLDDGST `hold.reserve_id`); text uses `{{ ci.titles }}` (SMS), `{{ ci.titles_comma }}` (voice), `{{ ci.due }}` |
+| All at once (cron) | PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST, ODUE, ODUE2, ODUE3 | `[% FOREACH c IN checkouts %]…[% END %]` (ODUE*: `o IN overdues`) in the text, plus `checkouts: "[% FOREACH … %][% c.issue_id %],[% END %]"` |
+
+Do not put anything but the id line between the `----` markers: Koha repeats that part once per event.
+
+### Upgrading existing templates
+
+Uploading a newer KPZ rewrites untouched canned templates automatically; locally edited ones are listed on Configure. To preview or re-run:
+
+```bash
+sudo koha-shell <instance> -c \
+  'perl /path/to/CirriusImpact/install_message_templates.pl --upgrade --dry-run --no-restart'
+```
+
+Drop `--dry-run` to apply.
+
 ## SMS character budget (70 vs 160)
 
 Carriers use:

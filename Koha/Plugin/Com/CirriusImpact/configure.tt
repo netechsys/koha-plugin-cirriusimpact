@@ -20,6 +20,16 @@
     [% claim_error | html %]
   </div>
   [% END %]
+  [% IF template_upgrade_customized.size %]
+  <div class="alert alert-warning" style="margin: 1em 0; padding: 0.75em 1em; background: #fff3cd; border: 1px solid #ffeeba; color: #856404;">
+    <strong>Notice templates need review (v[% template_upgrade_version | html %]).</strong>
+    These CirriusImpact notices were edited locally, so the upgrade left them unchanged. Koha builds CHECKOUT, CHECKIN, RENEWAL and HOLDDGST
+    incrementally, and PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE* must loop over every item; see TEMPLATE_I18N.md for the multi-item template shapes.
+    <ul style="margin: 0.5em 0 0 1.5em;">
+      [% FOREACH row IN template_upgrade_customized %]<li>[% row | html %]</li>[% END %]
+    </ul>
+  </div>
+  [% END %]
 
   <fieldset>
     <legend>Claim configuration</legend>

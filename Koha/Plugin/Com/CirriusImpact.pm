@@ -21,7 +21,9 @@ use Koha::Libraries;
 use Koha::Biblios;
 use Koha::Items;
 use Koha::Checkouts;
+use Koha::Old::Checkouts;
 use Koha::Holds;
+use Koha::Old::Holds;
 use Template;
 use base qw(Koha::Plugins::Base);
 
@@ -51,14 +53,14 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.4";
+our $VERSION = "1.3.5";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-07-20',
+    date_updated    => '2026-09-30',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -875,6 +877,9 @@ sub _ci_configure_template_params {
         bootstrap_api_url                  => $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url,
         bootstrap_library_id               => $self->retrieve_data('bootstrap_library_id'),
         bootstrap_claimed_at               => $self->retrieve_data('bootstrap_claimed_at'),
+        template_upgrade_version           => $self->retrieve_data('template_upgrade_version'),
+        template_upgrade_updated           => $self->retrieve_data('template_upgrade_updated'),
+        template_upgrade_customized        => [ grep { length } split /,/, ( $self->retrieve_data('template_upgrade_customized') // '' ) ],
         %extra,
     );
     if ( $consortia_mode eq 'independent' ) {
@@ -950,7 +955,30 @@ sub install {
 sub upgrade {
     my ($self, $args) = @_;
     $self->_ci_ensure_branch_services_migrated;
+    $self->_ci_upgrade_message_templates;
     return $self->_ensure_message_status_values();
+}
+
+# Rewrite untouched canned CirriusImpact notices to the current multi-item shape;
+# hand-edited ones are listed on the Configure page for manual review.
+sub _ci_upgrade_message_templates {
+    my ($self) = @_;
+    my $log = Koha::Logger->get({ interface => 'plugin', category => 'CirriusImpact', prefix => 0 });
+    my $res = eval {
+        require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
+        Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::run_upgrade();
+    };
+    unless ( $res && $res->{ok} ) {
+        $log->error( "CirriusImpact template upgrade failed: " . ( $res ? $res->{error} : ( $@ // 'unknown error' ) ) );
+        return 0;
+    }
+    $log->info($_) for split /\n/, $res->{log};
+    $self->store_data({
+        template_upgrade_version    => $VERSION,
+        template_upgrade_updated    => $res->{updated},
+        template_upgrade_customized => join( ',', @{ $res->{customized} } ),
+    });
+    return 1;
 }
 
 sub uninstall { return 1; }
@@ -1153,7 +1181,8 @@ sub _render_tpl {
     my ($self, $tpl, $ctx) = @_;
     return undef unless defined $tpl;
     $tpl =~ s/\{\{\s*([^}}]+?)\s*\}\}/
-        my $val = $self->_resolve_path($1,$ctx); defined $val ? $val : "{{ $1 }}";
+        my $val = $self->_resolve_path($1,$ctx);
+        defined $val ? $val : ( $1 =~ m{^ci\.} ? '' : "{{ $1 }}" );
     /ge;
     $tpl =~ s/\[\%\s*([^%\]]+?)\s*\%\]/
         my $val = $self->_resolve_path($1,$ctx); defined $val ? $val : "[% $1 %]";
@@ -1240,6 +1269,8 @@ sub _recover_inline_cirriusimpact_yaml {
 
 sub _load_cirriusimpact_yaml_documents {
     my ($self, $content, $log, $message_id) = @_;
+    # Koha leaves the header/body/footer "----" markers in until a second event is appended.
+    $content =~ s/^[ \t]*----[ \t]*(?:\r?\n|\z)//mg if defined $content;
     $content = _normalize_cirriusimpact_yaml_content($content);
 
     my @yamls;
@@ -1403,7 +1434,7 @@ sub _generate_csv_output {
         my $mt = $msg->{message_type} || {};
         my $letter_code = $mt->{letter_code} || '';
         
-        if (_ci_base_letter_code($letter_code) eq 'HOLDDGST') {
+        if (_ci_base_letter_code($letter_code) eq 'HOLDDGST' && !$mt->{ci_combined}) {
             $log->info("Processing HOLDDGST message for digest grouping");
             # Debug: show message structure
             $log->info("Message structure keys: " . join(', ', keys %$msg));
@@ -2075,8 +2106,7 @@ sub before_send_messages {
                     _add_hold($self, $data, $hold);
                 }
                 if ($yaml->{holds}) {
-                    my @ids = split /,/, $yaml->{holds};
-                    for my $hid (@ids) { my $hold = Koha::Holds->find($hid); _add_hold($self, $data, $hold); }
+                    for my $hid (_ci_id_list($yaml->{holds})) { my $hold = Koha::Holds->find($hid); _add_hold($self, $data, $hold); }
                 }
 
                 # Library context (for phone/name)
@@ -2092,6 +2122,12 @@ sub before_send_messages {
                             $data->{library} = { name => $library_name };
                         }
                     } catch { };
+                }
+
+                my $ci_items = eval { $self->_ci_resolve_item_list($yaml) } || [];
+                if (@$ci_items) {
+                    $data->{ci} = $self->_ci_item_summary($ci_items);
+                    $data->{message_type}->{ci_combined} = $data->{ci}->{count};
                 }
 
                 my $ctx = { %$data, message_id => $m->id };
@@ -2166,6 +2202,7 @@ if (ref $data->{sms}->{to_numbers} eq 'ARRAY') {
 }
 
 # --- Backfill ODUE, CHECKOUT, CHECKIN, PREDUE, and additional message types IDs/title/date if YAML couldn't provide them
+eval { $self->_ci_apply_item_list_to_sections($data) };
 eval { $self->_ci_backfill_odue_identifiers($data) };
 eval { $self->_ci_backfill_checkout_identifiers($data) };
 eval { $self->_ci_backfill_checkin_identifiers($data) };
@@ -2215,6 +2252,7 @@ $self->_ci_apply_transport_fallback_text(
             my $transport = lc($msgt->{transport} // '');
             my $letter_code = $msgt->{letter_code} || '';
 	    # With IDs merged (or not), make sure ODUE, CHECKOUT, CHECKIN, PREDUE, and additional message types have identifiers + title/date
+		eval { $self->_ci_apply_item_list_to_sections($data) };
 		eval { $self->_ci_backfill_odue_identifiers($data) };
 		eval { $self->_ci_backfill_checkout_identifiers($data) };
 		eval { $self->_ci_backfill_checkin_identifiers($data) };
@@ -2324,6 +2362,7 @@ $self->_ci_apply_transport_fallback_text(
                     }
                     
                     # Backfill CALL section data after it's created
+                    eval { $self->_ci_apply_item_list_to_sections($data) };
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
@@ -2372,6 +2411,7 @@ $self->_ci_apply_transport_fallback_text(
                     }
                     
                     # Backfill EMAIL section data after it's created
+                    eval { $self->_ci_apply_item_list_to_sections($data) };
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
@@ -2409,6 +2449,7 @@ $self->_ci_apply_transport_fallback_text(
                     }
                     
                     # Backfill WHATSAPP section data after it's created
+                    eval { $self->_ci_apply_item_list_to_sections($data) };
                     eval { $self->_ci_backfill_odue_identifiers($data) };
                     eval { $self->_ci_backfill_checkout_identifiers($data) };
                     eval { $self->_ci_backfill_checkin_identifiers($data) };
@@ -2546,6 +2587,8 @@ for my $k (keys %$mf) {
 
             $log->info("FINISHED PROCESSING MESSAGE " . $m->id);
         }
+        # Test mode leaves statuses untouched, so the same page would be fetched forever.
+        last if $test_mode;
     }
 
     # ODUE suppression: Remove phone messages if corresponding SMS messages exist
@@ -2659,9 +2702,8 @@ sub _odue_codes {
     my $letter1 = $dbh->selectcol_arrayref(q{SELECT DISTINCT(letter1) FROM overduerules});
     my $letter2 = $dbh->selectcol_arrayref(q{SELECT DISTINCT(letter2) FROM overduerules});
     my $letter3 = $dbh->selectcol_arrayref(q{SELECT DISTINCT(letter3) FROM overduerules});
-    my @codes = ((@$letter1), (@$letter2), (@$letter3));
-    @codes = grep { defined $_ && length $_ } @codes;
-    return \@codes;
+    my @codes = ( 'ODUE', 'ODUE2', 'ODUE3', @$letter1, @$letter2, @$letter3 );
+    return _with_ci_letter_variants( grep { defined $_ && length $_ } @codes );
 }
 
 # Stock codes plus CODE-CI variants from install_message_templates.pl --ci-templates
@@ -2699,7 +2741,7 @@ sub _hold_codes {
 
 sub _predue_codes {
     # Return pre-due notice letter codes that should be processed
-    return _with_ci_letter_variants( 'PREDUE', 'PREDUEDGST' );
+    return _with_ci_letter_variants( 'PREDUE', 'PREDUEDGST', 'DUE', 'DUEDGST' );
 }
 
 sub _circulation_codes {
@@ -3095,6 +3137,125 @@ sub _add_hold {
     push @{ $data->{holds} }, $sub;
     $data->{items} //= [];
     push @{ $data->{items} }, { title => $sub->{title} } if $sub->{title};
+}
+
+# --- Multi-item notices (v1.3.5) --------------------------------------------
+#
+# Koha builds CHECKOUT, CHECKIN, RENEWAL and HOLDDGST incrementally: the letter is
+# split on "----" into header/body/footer and one body is appended per event, so
+# templates declare an empty list key in the header and emit "  - <id>" per event.
+# PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE* are rendered all at once and
+# emit a comma-separated id list from a FOREACH loop. Both shapes are resolved here
+# into one item list; templates reference it as {{ ci.titles }}, {{ ci.due }}, ...
+
+# Ids from a YAML list, a comma/space separated string, or a single scalar.
+sub _ci_id_list {
+    my ($value) = @_;
+    return () unless defined $value;
+    my @raw = ref($value) eq 'ARRAY' ? @$value : split /[,\s]+/, "$value";
+    return grep { /^\d+$/ } map { my $v = defined $_ ? "$_" : ''; $v =~ s/^\s+|\s+$//g; $v } @raw;
+}
+
+sub _ci_clean_title {
+    my ($title) = @_;
+    $title = '' unless defined $title;
+    $title =~ s/[\s\/:;,.]+$//;
+    $title =~ s/^\s+//;
+    return $title;
+}
+
+sub _ci_checkout_item {
+    my ($checkout) = @_;
+    return undef unless $checkout;
+    my $item   = eval { $checkout->item };
+    my $biblio = $item ? eval { $item->biblio } : undef;
+    return {
+        id           => $checkout->issue_id,
+        itemnumber   => $checkout->itemnumber // '',
+        biblionumber => $biblio ? $biblio->biblionumber : ( $item ? $item->biblionumber : '' ),
+        title        => _ci_clean_title( $biblio ? $biblio->title : '' ),
+        date         => $checkout->date_due // '',
+    };
+}
+
+sub _ci_hold_item {
+    my ($hold) = @_;
+    return undef unless $hold;
+    my $biblio = eval { $hold->biblio };
+    return {
+        id           => $hold->reserve_id,
+        itemnumber   => $hold->itemnumber // '',
+        biblionumber => $hold->biblionumber // '',
+        title        => _ci_clean_title( $biblio ? $biblio->title : '' ),
+        date         => $hold->expirationdate // '',
+    };
+}
+
+# Resolve checkouts / old_checkouts / holds id lists from a CirriusImpact YAML doc.
+sub _ci_resolve_item_list {
+    my ( $self, $yaml ) = @_;
+    return [] unless ref($yaml) eq 'HASH';
+    my @items;
+    my %seen;
+    for my $id ( _ci_id_list( $yaml->{checkouts} ) ) {
+        next if $seen{"c$id"}++;
+        my $co = Koha::Checkouts->find($id) || eval { Koha::Old::Checkouts->find($id) };
+        my $it = _ci_checkout_item($co);
+        push @items, $it if $it;
+    }
+    for my $id ( _ci_id_list( $yaml->{old_checkouts} ) ) {
+        next if $seen{"c$id"}++;
+        my $co = eval { Koha::Old::Checkouts->find($id) } || Koha::Checkouts->find($id);
+        my $it = _ci_checkout_item($co);
+        push @items, $it if $it;
+    }
+    if ( ref( $yaml->{holds} ) eq 'ARRAY' ) {
+        for my $id ( _ci_id_list( $yaml->{holds} ) ) {
+            next if $seen{"h$id"}++;
+            my $hold = Koha::Holds->find($id) || eval { Koha::Old::Holds->find($id) };
+            my $it = _ci_hold_item($hold);
+            push @items, $it if $it;
+        }
+    }
+    return \@items;
+}
+
+sub _ci_item_summary {
+    my ( $self, $items ) = @_;
+    my @titles = grep { length } map { $_->{title} } @$items;
+    my ( %seen_date, @dates );
+    for my $it (@$items) {
+        next unless $it->{date};
+        my $us = $self->_format_date_us( $self->_format_date( $it->{date} ) );
+        push @dates, $us if length $us && !$seen_date{$us}++;
+    }
+    return {
+        count        => scalar(@$items),
+        titles       => join( '; ', @titles ),
+        titles_comma => join( ', ', @titles ),
+        due          => join( ', ', @dates ),
+        items        => $items,
+    };
+}
+
+# Copy the resolved item list onto every transport section (before legacy backfills).
+sub _ci_apply_item_list_to_sections {
+    my ( $self, $data ) = @_;
+    my $ci = $data->{ci};
+    return unless ref($ci) eq 'HASH' && $ci->{count};
+    my @items = @{ $ci->{items} };
+    for my $chan (qw(sms call email whatsapp)) {
+        my $section = $data->{$chan};
+        next unless ref($section) eq 'HASH';
+        $section->{itemsID}      ||= join( '; ', grep { length } map { $_->{itemnumber} } @items );
+        $section->{biblionumber} ||= $items[0]->{biblionumber};
+        $section->{title}        ||= $ci->{titles};
+        $section->{date}         ||= $items[0]->{date};
+        $section->{itemsID_list} ||= [ map { $_->{itemnumber} } @items ];
+        $section->{title_list}   ||= [ map { $_->{title} } @items ];
+        $section->{date_list}    ||= [ map { $_->{date} } @items ];
+    }
+    return;
 }
 
 # --- Plugin REST API -------------------------------------------------------
