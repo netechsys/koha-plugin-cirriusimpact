@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.5**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.6**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.5.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.6.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**

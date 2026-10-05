@@ -1,3 +1,12 @@
+## 1.3.6 - 2026-10-05
+
+### Notice dates follow Koha's dateformat
+- **FIXED:** Dates in SMS/voice text had day and month swapped when the day was 12 or less (e.g. HOLDDGST "Pickup by 7/10/2026" for 7 October); the export-time US rewrite of message text is removed.
+- **CHANGED:** `{{ ci.due }}` and plugin fallback text use Koha's `dateformat` preference (`us`, `metric`, `dmydot`, `iso`), the same as `$KohaDates`, so all notices on a site use one format.
+- **ADDED:** Voice scripts speak dates with the month name in the notice language ("October 7" / "7 October", "7 de octubre", "7 octobre"); the year is added only when it is not the current year.
+- **UNCHANGED:** Export `date` column stays `DD/MM/YYYY`.
+- **DOCS:** RELEASE_NOTES_v1.3.6, TEMPLATE_I18N, BYWATER_SUPPORTED_NOTICES, NOTIFICATION_TYPES, QUICKSTART, README.
+
 ## 1.3.5 - 2026-09-30
 
 ### Multi-item notices (incremental vs all-at-once)

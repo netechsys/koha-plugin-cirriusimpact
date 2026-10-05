@@ -68,6 +68,10 @@ my $level = $result->{level}; # Returns 2
 
 CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are built incrementally by Koha; PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE/ODUE2/ODUE3 are rendered all at once. Either way the plugin sends **one** SMS/call per notice listing every item and exports one CSV row (`itemsID` / `title` joined with `; `); `notificationType` / `notificationLevel` come from the letter code as above. Template shapes: [TEMPLATE_I18N.md](TEMPLATE_I18N.md#multi-item-notices-v135).
 
+## Notice dates (v1.3.6)
+
+Dates in SMS text follow the Koha `dateformat` preference on every notice type (`us` `10/07/2026`, `metric` `07/10/2026`, `dmydot` `07.10.2026`, `iso` `2026-10-07`); voice scripts speak the month name ("October 7" / "7 October"). The CSV `date` column is always `DD/MM/YYYY`. See [TEMPLATE_I18N.md](TEMPLATE_I18N.md#notice-dates-v136).
+
 ## Implementation
 
 The lookup table is implemented in `CirriusImpact.pm` as the `_get_notification_type_and_level()` function:

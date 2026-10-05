@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.5';
+our $VERSION = '1.3.6';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',

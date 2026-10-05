@@ -53,14 +53,14 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.5";
+our $VERSION = "1.3.6";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-09-30',
+    date_updated    => '2026-10-05',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -1607,8 +1607,7 @@ sub _generate_csv_output {
                 my @filtered = grep { defined && $_ ne '' } @dates;
                 $first_date = $filtered[0] // '';
             }
-            # Convert date to US format (m/d/y) for messageText
-            my $us_date = $self->_format_date_us($first_date);
+            my $shown_date = $self->_ci_display_date($first_date);
             
             # Get branch info from first message - check multiple sources
             my $branchname = '';
@@ -1685,14 +1684,14 @@ sub _generate_csv_output {
                             $branchname || 'Library',
                             $count,
                             $title_list,
-                            $us_date || $first_date
+                            $shown_date || $first_date
                         );
                     } else {
                         $digest_mt->{sms}->{text} = sprintf(
                             "%s: Hold ready: %s. Pickup by %s.",
                             $branchname || 'Library',
                             $combined_title,
-                            $us_date || $first_date
+                            $shown_date || $first_date
                         );
                     }
                 }
@@ -1740,7 +1739,7 @@ sub _generate_csv_output {
                             $count,
                             $title_list,
                             $branchname || 'Library',
-                            $us_date || $first_date,
+                            $shown_date || $first_date,
                             $branchphone || ''
                         );
                     } else {
@@ -1749,7 +1748,7 @@ sub _generate_csv_output {
                             $firstname || 'Patron',
                             $combined_title,
                             $branchname || 'Library',
-                            $us_date || $first_date,
+                            $shown_date || $first_date,
                             $branchphone || ''
                         );
                     }
@@ -1767,7 +1766,7 @@ sub _generate_csv_output {
                         $digest_msg->{patron}->{firstname} || 'Patron',
                         $count,
                         $title_list,
-                        $us_date || $first_date,
+                        $shown_date || $first_date,
                         ($library->{phone} || $library->{branchphone}) || ''
                     ),
                 };
@@ -1904,8 +1903,9 @@ sub _generate_csv_output {
             } elsif ($transport eq 'whatsapp') {
                 $message_text = $transport_section->{text} || '';
             }
-            # Convert dates in messageText to US format (m/d/y)
-            $message_text = $self->_convert_dates_in_text_to_us_format($message_text);
+            # SMS keeps the library's dateformat; voice speaks the month name.
+            $message_text = $self->_ci_speak_dates_in_text( $message_text, $row_data{language} )
+              if $transport eq 'phone';
             $row_data{messageText} = $message_text;
         }
         
@@ -2803,159 +2803,121 @@ sub _format_date {
     return $formatted_date;
 }
 
-# Format date in US format (m/d/y) for messageText
-sub _format_date_us {
-    my ($self, $date_string) = @_;
-    return '' unless $date_string;
-    
-    # Handle dd/mm/yyyy format (from _format_date output) - most common case
-    if ($date_string =~ /^(\d{2})\/(\d{2})\/(\d{4})$/) {
-        my ($d, $m, $y) = ($1, $2, $3);
-        # If first number > 12, it's definitely dd/mm format, swap to m/d/y
-        if ($d > 12) {
-            # Remove leading zeros
-            $m =~ s/^0+//;
-            $m = '1' if $m eq '';
-            $d =~ s/^0+//;
-            $d = '1' if $d eq '';
-            return "$m/$d/$y";
-        }
-        # If first number <= 12, could be either format
-        # Check if second number > 12 - if so, first must be month (US format)
-        if ($m > 12) {
-            # First is month, already US format, just remove leading zeros
-            $d =~ s/^0+//;
-            $d = '1' if $d eq '';
-            $m =~ s/^0+//;
-            $m = '1' if $m eq '';
-            return "$m/$d/$y";
-        }
-        # Both <= 12, assume dd/mm format (from _format_date) and swap
-        $d =~ s/^0+//;
-        $d = '1' if $d eq '';
-        $m =~ s/^0+//;
-        $m = '1' if $m eq '';
-        return "$m/$d/$y";
-    }
-    
-    # Handle single-digit format (d/m/yyyy or m/d/yyyy)
-    if ($date_string =~ /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/) {
-        my ($first, $second, $y) = ($1, $2, $3);
-        # If first > 12, must be dd/mm, swap
-        if ($first > 12) {
-            return "$second/$first/$y";
-        }
-        # If second > 12, first is month (US format)
-        if ($second > 12) {
-            return "$first/$second/$y";
-        }
-        # Both <= 12, assume dd/mm format and swap
-        return "$second/$first/$y";
-    }
-    
-    # Handle MySQL date format (YYYY-MM-DD)
-    if ($date_string =~ /^(\d{4})-(\d{2})-(\d{2})/) {
-        my ($y, $m, $d) = ($1, $2, $3);
-        $m =~ s/^0+//;
-        $m = '1' if $m eq '';
-        $d =~ s/^0+//;
-        $d = '1' if $d eq '';
-        return "$m/$d/$y";
-    }
-    
-    # Handle MySQL datetime format (YYYY-MM-DD HH:MM:SS)
-    if ($date_string =~ /^(\d{4})-(\d{2})-(\d{2})\s/) {
-        my ($y, $m, $d) = ($1, $2, $3);
-        $m =~ s/^0+//;
-        $m = '1' if $m eq '';
-        $d =~ s/^0+//;
-        $d = '1' if $d eq '';
-        return "$m/$d/$y";
-    }
-    
-    # If we can't parse it, return the original string
-    return $date_string;
+# --- Notice dates (v1.3.6) ---------------------------------------------------
+#
+# Patron-facing dates follow Koha's dateformat preference, exactly like $KohaDates:
+# us MM/DD/YYYY, metric DD/MM/YYYY, dmydot DD.MM.YYYY, iso YYYY-MM-DD. Voice scripts
+# speak the month name instead. The export "date" column stays DD/MM/YYYY (_format_date).
+
+my @CI_MONTHS = (
+    undef,
+    { eng => 'January',   spa => 'enero',      fre => 'janvier' },
+    { eng => 'February',  spa => 'febrero',    fre => 'fevrier' },
+    { eng => 'March',     spa => 'marzo',      fre => 'mars' },
+    { eng => 'April',     spa => 'abril',      fre => 'avril' },
+    { eng => 'May',       spa => 'mayo',       fre => 'mai' },
+    { eng => 'June',      spa => 'junio',      fre => 'juin' },
+    { eng => 'July',      spa => 'julio',      fre => 'juillet' },
+    { eng => 'August',    spa => 'agosto',     fre => 'aout' },
+    { eng => 'September', spa => 'septiembre', fre => 'septembre' },
+    { eng => 'October',   spa => 'octubre',    fre => 'octobre' },
+    { eng => 'November',  spa => 'noviembre',  fre => 'novembre' },
+    { eng => 'December',  spa => 'diciembre',  fre => 'decembre' },
+);
+
+sub _ci_dateformat {
+    my $pref = lc( eval { C4::Context->preference('dateformat') } // '' );
+    return $pref =~ /^(?:us|metric|iso|dmydot)$/ ? $pref : 'us';
 }
 
-# Convert all dates in text from dd/mm/yyyy to m/d/yyyy format (US format)
-sub _convert_dates_in_text_to_us_format {
-    my ($self, $text) = @_;
-    return '' unless $text;
-    
-    # Pattern to match dates in dd/mm/yyyy format (4-digit year only)
-    # _format_date outputs dates as dd/mm/yyyy (e.g., "19/11/2025")
-    # We need to convert these to m/d/yyyy (e.g., "11/19/2025")
-    my $converted_text = $text;
-    
-    # Match dates with 4-digit year to avoid false positives with phone numbers
-    # Convert dd/mm/yyyy to m/d/yyyy
-    $converted_text =~ s{
-        \b(\d{1,2})/(\d{1,2})/(\d{4})\b
-    }{
-        my ($first, $second, $year) = ($1, $2, $3);
-        my $first_num = int($first);
-        my $second_num = int($second);
-        
-        # If first number > 12, it's definitely a day (dd/mm format), swap to m/d
-        if ($first_num > 12) {
-            # Remove leading zeros from month and day
-            $second =~ s/^0+//;
-            $second = '1' if $second eq '';
-            $first =~ s/^0+//;
-            $first = '1' if $first eq '';
-            "$second/$first/$year";  # Swap: month/day/year
-        }
-        # If second number > 12, it's already month/day format (US format), leave as-is
-        elsif ($second_num > 12) {
-            # Already in US format, just remove leading zeros if present
-            $first =~ s/^0+//;
-            $first = '1' if $first eq '';
-            $second =~ s/^0+//;
-            $second = '1' if $second eq '';
-            "$first/$second/$year";
-        }
-        # Both <= 12 - ambiguous case
-        # Dates from _format_date are dd/mm/yyyy (e.g., "19/11/2025")
-        # Dates from our digest grouping use _format_date_us and are m/d/yyyy (e.g., "11/19/2025")
-        # Since _format_date always outputs 2-digit day and month with leading zeros,
-        # dates from it will be like "09/11/2025" or "19/11/2025"
-        # Dates already in US format from digest logic won't have leading zeros
-        else {
-            my $orig_first = $1;
-            my $orig_second = $2;
-            my $orig_first_len = length($orig_first);
-            my $orig_second_len = length($orig_second);
-            
-            # If original first part has 2 digits (with or without leading zero),
-            # and original second part also has 2 digits, it likely matches _format_date pattern (dd/mm/yyyy)
-            # So assume it's dd/mm format and swap
-            # Exception: if both parts are single digit, it might already be US format, so be cautious
-            if ($orig_first_len == 2 && $orig_second_len == 2) {
-                # Matches _format_date pattern (dd/mm/yyyy), swap to m/d/yyyy
-                $second =~ s/^0+//;
-                $second = '1' if $second eq '';
-                $first =~ s/^0+//;
-                $first = '1' if $first eq '';
-                "$second/$first/$year";  # Swap: month/day/year
-            } elsif ($orig_first_len == 2 && $orig_second_len == 1) {
-                # First is 2 digits, second is 1 digit - likely dd/m/yyyy, swap
-                $second =~ s/^0+//;
-                $second = '1' if $second eq '';
-                $first =~ s/^0+//;
-                $first = '1' if $first eq '';
-                "$second/$first/$year";
-            } else {
-                # Both are single digit or other pattern - likely already US format, leave as-is
-                $first =~ s/^0+//;
-                $first = '1' if $first eq '';
-                $second =~ s/^0+//;
-                $second = '1' if $second eq '';
-                "$first/$second/$year";
-            }
-        }
-    }gex;
-    
-    return $converted_text;
+sub _ci_valid_ymd {
+    my ( $y, $m, $d ) = @_;
+    return 0 unless $m >= 1 && $m <= 12 && $d >= 1;
+    my @dim = ( 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 );
+    my $max = $dim[$m];
+    $max = 29 if $m == 2 && ( ( $y % 4 == 0 && $y % 100 != 0 ) || $y % 400 == 0 );
+    return $d <= $max;
+}
+
+# (y, m, d) from a Koha value: YYYY-MM-DD[ HH:MM[:SS]], a DateTime, or the plugin's
+# internal DD/MM/YYYY (_format_date output). Empty list if it cannot be parsed.
+sub _ci_parse_ymd {
+    my ($raw) = @_;
+    return () unless defined $raw && $raw ne '';
+    if ( blessed($raw) && $raw->can('ymd') ) {
+        return ( $raw->year, $raw->month, $raw->day );
+    }
+    my ( $y, $m, $d );
+    if ( $raw =~ /^\s*(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T]|$)/ ) {
+        ( $y, $m, $d ) = ( $1, $2, $3 );
+    } elsif ( $raw =~ m{^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*$} ) {
+        ( $d, $m, $y ) = ( $1, $2, $3 );
+    } else {
+        return ();
+    }
+    return () unless _ci_valid_ymd( $y, $m, $d );
+    return ( $y + 0, $m + 0, $d + 0 );
+}
+
+sub _ci_format_ymd {
+    my ( $fmt, $y, $m, $d ) = @_;
+    return sprintf( '%04d-%02d-%02d', $y, $m, $d ) if $fmt eq 'iso';
+    return sprintf( '%02d/%02d/%04d', $d, $m, $y ) if $fmt eq 'metric';
+    return sprintf( '%02d.%02d.%04d', $d, $m, $y ) if $fmt eq 'dmydot';
+    return sprintf( '%02d/%02d/%04d', $m, $d, $y );
+}
+
+# Display date in the library's Koha dateformat (same output as $KohaDates).
+sub _ci_display_date {
+    my ( $self, $raw ) = @_;
+    my @ymd = _ci_parse_ymd($raw);
+    return defined $raw ? "$raw" : '' unless @ymd;
+    return _ci_format_ymd( $self->_ci_dateformat, @ymd );
+}
+
+# Spoken date with the month name. US libraries: "October 7"; others: "7 October".
+# Spanish "7 de octubre", French "7 octobre" ("1er" for the first). The year is
+# added only when it differs from the current year.
+sub _ci_spoken_date {
+    my ( $self, $y, $m, $d, $lang, $this_year ) = @_;
+    $lang = _ci_normalize_language($lang);
+    $lang = 'eng' unless $lang eq 'spa' || $lang eq 'fre';
+    $this_year //= ( localtime() )[5] + 1900;
+    my $month     = $CI_MONTHS[$m]{$lang};
+    my $with_year = $y != $this_year;
+    if ( $lang eq 'spa' ) {
+        return "$d de $month" . ( $with_year ? " de $y" : '' );
+    }
+    if ( $lang eq 'fre' ) {
+        return ( $d == 1 ? '1er' : $d ) . " $month" . ( $with_year ? " $y" : '' );
+    }
+    if ( $self->_ci_dateformat eq 'us' ) {
+        return "$month $d" . ( $with_year ? ", $y" : '' );
+    }
+    return "$d $month" . ( $with_year ? " $y" : '' );
+}
+
+# Replace dates in a voice script with spoken dates. Dates are read in the library's
+# dateformat (so 10/07/2026 is 7 October for us and 10 July for metric); ISO dates
+# are always recognised. Anything that is not a valid date is left untouched.
+sub _ci_speak_dates_in_text {
+    my ( $self, $text, $lang, $this_year ) = @_;
+    return '' unless defined $text && $text ne '';
+    my $fmt   = $self->_ci_dateformat;
+    my $speak = sub {
+        my ( $y, $m, $d, $orig ) = @_;
+        ( $y, $m, $d ) = ( $y + 0, $m + 0, $d + 0 );
+        return _ci_valid_ymd( $y, $m, $d ) ? $self->_ci_spoken_date( $y, $m, $d, $lang, $this_year ) : $orig;
+    };
+    $text =~ s{\b(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\b}{ $speak->( $1, $2, $3, $& ) }ge;
+    if ( $fmt eq 'dmydot' ) {
+        $text =~ s{\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b}{ $speak->( $3, $2, $1, $& ) }ge;
+    } elsif ( $fmt eq 'us' ) {
+        $text =~ s{\b(\d{1,2})/(\d{1,2})/(\d{4})\b}{ $speak->( $3, $1, $2, $& ) }ge;
+    } else {
+        $text =~ s{\b(\d{1,2})/(\d{1,2})/(\d{4})\b}{ $speak->( $3, $2, $1, $& ) }ge;
+    }
+    return $text;
 }
 
 # Get notice template from Koha database for a specific letter code and transport
@@ -3006,7 +2968,7 @@ sub _render_notice_template {
         FILTERS => {
             'KohaDates' => sub {
                 my $date = shift;
-                return $self->_format_date_us($date) || $date;
+                return $self->_ci_display_date($date);
             },
         },
     });
@@ -3226,8 +3188,8 @@ sub _ci_item_summary {
     my ( %seen_date, @dates );
     for my $it (@$items) {
         next unless $it->{date};
-        my $us = $self->_format_date_us( $self->_format_date( $it->{date} ) );
-        push @dates, $us if length $us && !$seen_date{$us}++;
+        my $shown = $self->_ci_display_date( $it->{date} );
+        push @dates, $shown if length $shown && !$seen_date{$shown}++;
     }
     return {
         count        => scalar(@$items),
@@ -4382,15 +4344,16 @@ sub _ci_backfill_predue_identifiers {
                         # For digest messages, try to build a proper message with all items
                         if ($section->{text} && $section->{text} =~ /is due \./) {
                             my $new_text = $section->{text};
+                            my $due_shown = $self->_ci_display_date($matched_item->{date_due});
                             if (scalar(@upcoming_items) > 1) {
                                 # Build digest message with multiple items
                                 my @titles = map { $_->{title} } @upcoming_items;
                                 my $titles_str = join('; ', @titles);
-                                $new_text =~ s/is due \./are due $matched_item->{date_due}/;
+                                $new_text =~ s/is due \./are due $due_shown/;
                                 $new_text =~ s/:\s+are due/: $titles_str are due/;
                             } else {
                                 # Single item message
-                                $new_text =~ s/is due \./is due $matched_item->{date_due}/;
+                                $new_text =~ s/is due \./is due $due_shown/;
                                 $new_text =~ s/:\s+is due/: $title is due/;
                             }
                             $section->{text} = $new_text;
@@ -4415,7 +4378,8 @@ sub _ci_backfill_predue_identifiers {
                         # Also try to update the message text if it's empty or has empty variables
                         if ($section->{text} && $section->{text} =~ /is due \./) {
                             my $new_text = $section->{text};
-                            $new_text =~ s/is due \./is due $matched_item->{date_due}/;
+                            my $due_shown = $self->_ci_display_date($matched_item->{date_due});
+                            $new_text =~ s/is due \./is due $due_shown/;
                             $new_text =~ s/:\s+is due/: $title is due/;
                             $section->{text} = $new_text;
                             $log->info("Updated message text to: '$new_text'");

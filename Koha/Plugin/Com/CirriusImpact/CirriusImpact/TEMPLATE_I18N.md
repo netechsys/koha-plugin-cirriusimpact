@@ -80,6 +80,19 @@ sudo koha-shell <instance> -c \
 
 Drop `--dry-run` to apply.
 
+## Notice dates (v1.3.6)
+
+Patron-facing dates follow Koha's **`dateformat`** system preference (Administration → System preferences → I18N/L10N), the same as `$KohaDates`. `{{ ci.due }}` and `[% … | $KohaDates %]` therefore produce the same format on every notice:
+
+| `dateformat` | SMS (7 October 2026) | Voice |
+|--------------|----------------------|-------|
+| `us` | `10/07/2026` | "October 7" |
+| `metric` | `07/10/2026` | "7 October" |
+| `dmydot` | `07.10.2026` | "7 October" |
+| `iso` | `2026-10-07` | "7 October" |
+
+Voice scripts are converted to spoken dates with the month name in the notice language (Spanish "7 de octubre", French "7 octobre", "1er" for the first); the year is spoken only when it is not the current year. Write dates in templates with `$KohaDates` or `{{ ci.due }}`; do not hard-code a format. The CSV `date` column is always `DD/MM/YYYY`. Details: [RELEASE_NOTES_v1.3.6.md](RELEASE_NOTES_v1.3.6.md).
+
 ## SMS character budget (70 vs 160)
 
 Carriers use:

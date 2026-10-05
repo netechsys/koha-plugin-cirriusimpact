@@ -1,7 +1,7 @@
 # CirriusImpact Koha Plugin — Supported Notice Types
 
 **Document date:** September 30, 2026  
-**Plugin release:** CirriusImpact **v1.3.5**  
+**Plugin release:** CirriusImpact **v1.3.6**  
 **Releases:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases  
 **Integration:** SMS (`commType=T`) and voice (`commType=V`) via CSV export + SFTP; Koha status lifecycle (`pending` → `transmitted` → `sent` / `failed` / `pending`)
 
@@ -136,6 +136,10 @@ Koha builds multi-item notices in two ways (see Springshare’s [incremental vs 
 
 The plugin resolves the ids and sends **one** SMS/call listing every title (and due / pickup-by dates); the CSV row carries `; `-joined `itemsID` / `title`. Plugin upgrade rewrites untouched canned templates automatically and lists locally edited ones on Configure. Details: `RELEASE_NOTES_v1.3.5.md`.
 
+## Notice dates (v1.3.6)
+
+All notices use the library's Koha `dateformat` preference for dates in SMS text, so a US site (`us`) sends `10/07/2026` and a UK/EU site (`metric`) sends `07/10/2026` on every notice type. Voice calls speak the month name ("October 7" for `us`, otherwise "7 October"; Spanish and French month names for those languages). Before v1.3.6 dates with a day of 12 or less could arrive with day and month swapped. Confirm `dateformat` matches the library's country when onboarding. Details: `RELEASE_NOTES_v1.3.6.md`.
+
 ---
 
 ## Transport and pipeline requirements
@@ -178,16 +182,17 @@ Please confirm:
 
 ---
 
-## Reference files (v1.3.5)
+## Reference files (v1.3.6)
 
 | File | Role |
 |------|------|
 | `notification_mapping.yml` | Koha letter code → CirriusImpact type/level |
 | `CirriusImpact.pm` → `before_send_messages` | Notice selection and CSV export |
 | `NOTIFICATION_TYPES.md` | In-plugin documentation of mappings |
-| `RELEASE_NOTES_v1.3.5.md` | Current production release notes |
+| `RELEASE_NOTES_v1.3.6.md` | Current production release notes (notice dates) |
+| `RELEASE_NOTES_v1.3.5.md` | Multi-item notices |
 | `TEMPLATE_I18N.md` | Template shapes (incremental vs all-at-once) and installer |
 
 ---
 
-**Install package:** `koha-plugin-cirriusimpact-v1.3.5.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+**Install package:** `koha-plugin-cirriusimpact-v1.3.6.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
