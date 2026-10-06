@@ -1,7 +1,7 @@
 # CirriusImpact Koha Plugin — Supported Notice Types
 
 **Document date:** September 30, 2026  
-**Plugin release:** CirriusImpact **v1.3.6**  
+**Plugin release:** CirriusImpact **v1.3.7**  
 **Releases:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases  
 **Integration:** SMS (`commType=T`) and voice (`commType=V`) via CSV export + SFTP; Koha status lifecycle (`pending` → `transmitted` → `sent` / `failed` / `pending`)
 
@@ -195,4 +195,4 @@ Please confirm:
 
 ---
 
-**Install package:** `koha-plugin-cirriusimpact-v1.3.6.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+**Install package:** `koha-plugin-cirriusimpact-v1.3.7.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)

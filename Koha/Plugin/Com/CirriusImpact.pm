@@ -53,14 +53,14 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.6";
+our $VERSION = "1.3.7";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-10-05',
+    date_updated    => '2026-10-06',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -102,7 +102,7 @@ sub new {
     return $self;
 }
 
-our $default_bootstrap_api_url = 'https://configportal-devel.cgsis.com/koha-bootstrap/v1/claim';
+our $default_bootstrap_api_url = 'https://configportal.cgsis.com/koha-bootstrap/v1/claim';
 
 sub configure {
     my ($self, $args) = @_;

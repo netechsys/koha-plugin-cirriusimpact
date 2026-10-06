@@ -47,7 +47,7 @@ Set the following system preferences in Koha:
 
 | Field | Purpose |
 |-------|---------|
-| **Bootstrap API URL** | Portal claim endpoint from CirriusImpact |
+| **Bootstrap API URL** | Default `https://configportal.cgsis.com/koha-bootstrap/v1/claim`; change only if CirriusImpact gives you another URL |
 | **Library ID** | Portal library (standalone, Type 1, or Type 2 **root**) |
 | **Install token** | One-time token from CirriusImpact |
 

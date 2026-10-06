@@ -9,10 +9,10 @@ Exports Koha patron notices for CirriusImpact SMS and voice delivery.
 
 | Channel | Version | Package |
 |---------|---------|---------|
-| **Production (stable)** | **v1.3.6** | [koha-plugin-cirriusimpact-v1.3.6.kpz](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.3.6) ([GitHub](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.3.6)) |
+| **Production (stable)** | **v1.3.7** | [koha-plugin-cirriusimpact-v1.3.7.kpz](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases/v1.3.7) ([GitHub](https://github.com/netechsys/koha-plugin-cirriusimpact/releases/tag/v1.3.7)) |
 | Previous | v1.3.5 | See [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) |
 
-Use **v1.3.6** for production Koha sites unless CirriusImpact specifies another build.
+Use **v1.3.7** for production Koha sites unless CirriusImpact specifies another build.
 
 ## Documentation
 
@@ -23,7 +23,7 @@ Use **v1.3.6** for production Koha sites unless CirriusImpact specifies another 
 | [TEMPLATE_I18N.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/TEMPLATE_I18N.md) | Notice template installer (CLI) |
 | [NOTIFICATION_TYPES.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/NOTIFICATION_TYPES.md) | Supported notice types |
 | [CHANGELOG.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/CHANGELOG.md) | Version history |
-| [RELEASE_NOTES_v1.3.6.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/RELEASE_NOTES_v1.3.6.md) | Current release notes |
+| [RELEASE_NOTES_v1.3.7.md](Koha/Plugin/Com/CirriusImpact/CirriusImpact/RELEASE_NOTES_v1.3.7.md) | Current release notes |
 | [SECURITY.md](SECURITY.md) | Security reporting |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contributions |
 

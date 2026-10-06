@@ -1,3 +1,10 @@
+## 1.3.7 - 2026-10-06
+
+### Production claim endpoint
+- **CHANGED:** Default **Bootstrap API URL** is now the production Configuration Portal, `https://configportal.cgsis.com/koha-bootstrap/v1/claim` (was the devel portal). Claim works on every CirriusImpact server behind that name; install tokens are valid on any of them.
+- **UNCHANGED:** Sites that already saved a Bootstrap API URL keep it; branch sync uses the saved URL.
+- **DOCS:** RELEASE_NOTES_v1.3.7, INSTALL, QUICKSTART, README.
+
 ## 1.3.6 - 2026-10-05
 
 ### Notice dates follow Koha's dateformat
