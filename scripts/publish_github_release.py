@@ -55,7 +55,13 @@ TOKEN = _load_token_from_env_files() or TOKEN
 
 
 def _run(cmd: list[str], cwd: Path, env: dict | None = None) -> None:
-    print("+", " ".join(cmd))
+    shown = []
+    for part in cmd:
+        if "x-access-token:" in part or "oauth2:" in part or "://" in part and "@" in part:
+            shown.append("<redacted-url>")
+        else:
+            shown.append(part)
+    print("+", " ".join(shown))
     subprocess.run(cmd, cwd=cwd, check=True, env=env)
 
 

@@ -132,10 +132,10 @@ sudo koha-shell INSTANCE -c \
 
 #### Upgrading templates (v1.3.5+)
 
-Uploading a newer KPZ runs the plugin upgrade, which rewrites **untouched** canned CirriusImpact notices to the current multi-item shape (CHECKOUT, CHECKIN, RENEWAL, HOLDDGST, PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST, ODUE, ODUE2, ODUE3; all languages, `CODE-CI` and branch rows).
+Uploading a newer KPZ runs the plugin upgrade. Shipped CirriusImpact notices, including the v1.3.5–v1.3.7 copies, are rewritten to the current templates. A wrapped notice keeps the library's wording: the patron id is corrected, and CHECKOUT, CHECKIN, RENEWAL, and HOLDDGST are rebuilt from the archived original when the repeat markers were inside the sentence. A notice whose wording is not a shipped template is left in place and listed on Configure.
 
-- Wrapped notices (Defaults / Consortia) keep the library's own text and are not changed.
-- Locally edited CirriusImpact notices are not changed; Configure lists them under **Notice templates need review**. See [TEMPLATE_I18N.md](TEMPLATE_I18N.md#multi-item-notices-v135) for the required shapes.
+- A wrapped notice keeps the library's wording. The patron id is corrected, and CHECKOUT, CHECKIN, RENEWAL, and HOLDDGST are rebuilt from the archived original when the repeat markers were inside the sentence.
+- A notice whose wording is not a shipped template is left in place and listed on Configure under **Notice templates need review**. See [TEMPLATE_I18N.md](TEMPLATE_I18N.md#multi-item-notices-v135) for the required shapes.
 
 Preview or re-run by hand:
 

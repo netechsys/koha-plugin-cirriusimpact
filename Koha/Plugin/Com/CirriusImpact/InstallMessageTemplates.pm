@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.8';
+our $VERSION = '1.3.9';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -2306,9 +2306,26 @@ sub _content_digest {
     return Digest::SHA::sha1_hex($norm);
 }
 
-# Plugin upgrade: rewrite untouched canned CirriusImpact templates (stock codes,
-# CODE-CI and branch rows) to the v1.3.5 multi-item shape. Rows wrapping the
-# library's own notice are left alone; hand-edited CirriusImpact rows are reported.
+# v1.3.5–v1.3.7 canned notices match the current text except this patron tag.
+sub _with_legacy_patron_token {
+    my ($content) = @_;
+    $content = '' unless defined $content;
+    $content =~ s/\[%\s*borrower\.borrowernumber\s*%\]/[% borrowernumber %]/g;
+    return $content;
+}
+
+sub _with_current_patron_token {
+    my ($content) = @_;
+    $content = '' unless defined $content;
+    $content =~ s/\[%\s*borrowernumber\s*%\]/[% borrower.borrowernumber %]/g;
+    return $content;
+}
+
+# Plugin upgrade: rewrite shipped CirriusImpact templates (stock codes,
+# CODE-CI and branch rows) to the current shape, including the v1.3.5–v1.3.7
+# canned text and older legacy hashes. Wrapped notices keep the library's
+# wording; the patron id is corrected and incremental wraps are rebuilt.
+# Hand-edited wording is reported and not replaced.
 #
 # run_upgrade(dbh => $dbh, dry_run => 0|1)
 # Returns { ok, updated => N, customized => [ "CODE/transport/lang/branch", ... ], log, error }
@@ -2321,11 +2338,16 @@ sub run_upgrade {
           or return { ok => 0, updated => 0, customized => [], log => '', error => "Database unavailable: $@" };
     }
 
-    my ( %new_template, %current_digest );
+    my ( %new_template, %current_digest, %previous_digest, %review_codes );
     for my $tpl ( values %TEMPLATES ) {
-        next unless $LEGACY_TEMPLATE_DIGESTS{ $tpl->{code} } || $tpl->{code} eq 'DUEDGST';
-        $new_template{ $tpl->{code} }{ $tpl->{transport} } = $tpl;
-        $current_digest{ $tpl->{code} }{ _content_digest($_) } = 1 for values %{ $tpl->{content} };
+        my $code = $tpl->{code};
+        $new_template{$code}{ $tpl->{transport} } = $tpl;
+        $review_codes{$code} = 1 if $LEGACY_TEMPLATE_DIGESTS{$code} || $code eq 'DUEDGST';
+        for my $lang ( keys %{ $tpl->{content} } ) {
+            my $body = $tpl->{content}{$lang};
+            $current_digest{$code}{ $tpl->{transport} }{ _content_digest($body) } = $lang;
+            $previous_digest{$code}{ $tpl->{transport} }{ _content_digest( _with_legacy_patron_token($body) ) } = $lang;
+        }
     }
 
     my ( $updated, @customized );
@@ -2343,30 +2365,59 @@ sub run_upgrade {
             next unless _already_ci_yaml($content);
             ( my $base = $row->{code} ) =~ s/-CI\z//;
             next unless $new_template{$base};
-            my $label = join '/', $row->{code}, $row->{message_transport_type}, $row->{lang},
+            my $transport = $row->{message_transport_type} // '';
+            my $label = join '/', $row->{code}, $transport, $row->{lang},
               ( length( $row->{branchcode} // '' ) ? $row->{branchcode} : 'DEFAULT' );
-
-            next if $content =~ /Original Notice Template/;
             my $digest = _content_digest($content);
-            next if $current_digest{$base}{$digest};
 
-            my $legacy = $LEGACY_TEMPLATE_DIGESTS{$base} ? $LEGACY_TEMPLATE_DIGESTS{$base}{$digest} : undef;
-            unless ($legacy) {
-                push @customized, $label;
-                _log( \@log_lines, "Customized (left unchanged, review for multi-item support): $label" );
+            if ( $content =~ /Original Notice Template/ ) {
+                my $new;
+                my ($list_key) = _incremental_list_for_code($base);
+                my $original = _extract_original_from_wrapped($content);
+                if ( $list_key && defined $original && $original =~ /----/ ) {
+                    $new = _wrap_existing_as_ci( $original, $transport, $base );
+                }
+                elsif ( $content =~ /\[%\s*borrowernumber\s*%\]/ ) {
+                    $new = _with_current_patron_token($content);
+                }
+                if ( defined $new && $new =~ /\S/ && _content_digest($new) ne $digest ) {
+                    $upd->execute( $new, $row->{id} ) unless $opts{dry_run};
+                    $updated++;
+                    _log( \@log_lines, ( $opts{dry_run} ? "Would update" : "Updated" ) . " wrapped $label" );
+                }
                 next;
             }
-            my ( undef, $lang ) = split /:/, $legacy, 2;
-            my $tpl = $new_template{$base}{ $row->{message_transport_type} };
-            my $new = $tpl ? $tpl->{content}{$lang} // $tpl->{content}{en} : undef;
-            unless ( defined $new && $new =~ /\S/ ) {
-                push @customized, $label;
-                _log( \@log_lines, "No v$VERSION template for $label; left unchanged" );
-                next;
+
+            next if $current_digest{$base}{$transport}{$digest};
+
+            my $lang = $previous_digest{$base}{$transport}{$digest};
+            if ( !defined $lang || $lang eq '' ) {
+                my $legacy = $LEGACY_TEMPLATE_DIGESTS{$base} ? $LEGACY_TEMPLATE_DIGESTS{$base}{$digest} : undef;
+                ( undef, $lang ) = split /:/, $legacy, 2 if $legacy;
             }
-            $upd->execute( $new, $row->{id} ) unless $opts{dry_run};
-            $updated++;
-            _log( \@log_lines, ( $opts{dry_run} ? "Would update" : "Updated" ) . " $label [$lang]" );
+            if ( defined $lang && $lang ne '' ) {
+                my $tpl = $new_template{$base}{$transport};
+                my $new = $tpl ? ( $tpl->{content}{$lang} // $tpl->{content}{en} ) : undef;
+                if ( defined $new && $new =~ /\S/ ) {
+                    $upd->execute( $new, $row->{id} ) unless $opts{dry_run};
+                    $updated++;
+                    _log( \@log_lines, ( $opts{dry_run} ? "Would update" : "Updated" ) . " $label [$lang]" );
+                    next;
+                }
+            }
+
+            my $token_fixed = _with_current_patron_token($content);
+            if ( _content_digest($token_fixed) ne $digest ) {
+                $upd->execute( $token_fixed, $row->{id} ) unless $opts{dry_run};
+                $updated++;
+                $digest  = _content_digest($token_fixed);
+                $content = $token_fixed;
+                _log( \@log_lines, ( $opts{dry_run} ? "Would update" : "Updated" ) . " patron id in $label" );
+            }
+            next if $current_digest{$base}{$transport}{$digest};
+            next unless $review_codes{$base};
+            push @customized, $label;
+            _log( \@log_lines, "Customized (wording kept): $label" );
         }
         1;
     };

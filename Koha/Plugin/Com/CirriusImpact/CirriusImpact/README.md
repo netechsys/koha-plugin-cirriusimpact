@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-Version: **1.3.8**
+Version: **1.3.9**
 
 Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export over SFTP).
 
@@ -12,7 +12,8 @@ Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export 
 - [NOTIFICATION_TYPES.md](NOTIFICATION_TYPES.md) — supported notice types
 - [BYWATER_SUPPORTED_NOTICES.md](BYWATER_SUPPORTED_NOTICES.md) — ByWater-oriented notice list
 - [CHANGELOG.md](CHANGELOG.md) — history
-- [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md) — current production release notes
+- [RELEASE_NOTES_v1.3.9.md](RELEASE_NOTES_v1.3.9.md) — current production release notes
+- [RELEASE_NOTES_v1.3.8.md](RELEASE_NOTES_v1.3.8.md) — Configure Save, letter names, incremental notices
 - [RELEASE_NOTES_v1.3.7.md](RELEASE_NOTES_v1.3.7.md) — production claim URL
 - [RELEASE_NOTES_v1.3.6.md](RELEASE_NOTES_v1.3.6.md) — notice dates
 
