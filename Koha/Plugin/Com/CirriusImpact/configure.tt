@@ -50,6 +50,7 @@
       <div class="form-group">
         <label>Bootstrap API URL</label>
         <input type="text" name="bootstrap_api_url" value="[% bootstrap_api_url | html %]" class="form-control"/>
+        <p class="hint">Leave this at <code>https://configportal.cgsis.com/koha-bootstrap/v1/claim</code>. A 127.0.0.1 address is not the claim server.</p>
       </div>
       <div class="form-group">
         <label>Library ID</label>
@@ -63,7 +64,7 @@
     </form>
   </fieldset>
 
-  <form method="get">
+  <form method="get" id="ci-save-form">
     <input type="hidden" name="class" value="[% CLASS %]"/>
     <input type="hidden" name="method" value="[% METHOD %]"/>
     <input type="hidden" name="save" value="1"/>
@@ -204,13 +205,44 @@
     </fieldset>
 
     <fieldset>
+      <legend>Features</legend>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" form="ci-save-form" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
+          Skip calling ODUE if patron has SMS or Email
+        </label>
+      </div>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="include_messagetext" value="1" form="ci-save-form"
+            [% IF include_messagetext %]checked="checked"[% END %]>
+          Include messageText column in CSV output
+        </label>
+      </div>
+      [% IF consortia_mode %]
+      <p class="hint">Consortia mode: <strong>[% consortia_mode | html %]</strong></p>
+      [% END %]
+    </fieldset>
+
+    <fieldset>
+      <legend>JSON Section Order</legend>
+      <input type="text" name="section_order" value="[% section_order %]" class="form-control" form="ci-save-form"/>
+      <p class="hint">
+        Comma-separated sections. Available: <code>message_type</code>, <code>patron</code>, <code>items</code>, <code>call</code>, <code>sms</code>, <code>message</code>
+      </p>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary" form="ci-save-form">Save</button>
+  </form>
+
+    <fieldset>
       <legend>Install notice templates</legend>
       <p class="hint">
         <strong>Defaults</strong> and <strong>Consortia</strong> modes read each existing Koha
         notice (<code>letter</code> row) and wrap its current text in CirriusImpact YAML
         so the plugin can export it — they do <em>not</em> replace your wording with
         canned CI sample text. Matching rows are <strong>overwritten</strong> with the
-        wrapped form. Notices that already contain <code>CirriusImpact: yes</code> are skipped.
+        wrapped form. Notices that already contain <code>CirriusImpact: yes</code> are skipped. A transport with no notice yet gets the canned template, so a library can start SMS without an existing SMS letter. CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are rebuilt so the <code>----</code> repeat stays outside the sentence.
         <strong>CI templates</strong> still install canned sample notices as <code>CODE-CI</code>
         only (stock codes unchanged). Save Branch services first if you use
         <em>consortia from plugin</em>. No Koha restart is required from this screen.
@@ -367,36 +399,51 @@
       </script>
     </fieldset>
 
-    <fieldset>
-      <legend>Features</legend>
-      <div class="checkbox">
-        <label>
-          <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
-          Skip calling ODUE if patron has SMS or Email
-        </label>
-      </div>
-      <div class="checkbox">
-        <label>
-          <input type="checkbox" name="include_messagetext" value="1"
-            [% IF include_messagetext %]checked="checked"[% END %]>
-          Include messageText column in CSV output
-        </label>
-      </div>
-      [% IF consortia_mode %]
-      <p class="hint">Consortia mode: <strong>[% consortia_mode | html %]</strong></p>
-      [% END %]
-    </fieldset>
 
-    <fieldset>
-      <legend>JSON Section Order</legend>
-      <input type="text" name="section_order" value="[% section_order %]" class="form-control"/>
-      <p class="hint">
-        Comma-separated sections. Available: <code>message_type</code>, <code>patron</code>, <code>items</code>, <code>call</code>, <code>sms</code>, <code>message</code>
-      </p>
-    </fieldset>
+  <fieldset>
+    <legend>Notice templates you can copy</legend>
+    <p class="hint">
+      Paste one of these into Koha’s Notices tool for the matching letter code and SMS or phone transport.
+      The lines that are only <code>----</code> stay outside the sentence. Koha repeats the id line once per item.
+      <code>&#91;% borrower.borrowernumber %&#93;</code> is the patron id Koha fills in.
+      <code>{{ ci.titles }}</code> and <code>{{ ci.due }}</code> are filled by this plugin when the CSV is built.
+    </p>
+    <p><strong>CHECKOUT and RENEWAL (SMS)</strong></p>
+    <pre style="white-space: pre-wrap; background: #f7f7f7; border: 1px solid #ccc; padding: 0.75em;">---
+CirriusImpact: yes
+patron: &#91;% borrower.borrowernumber %&#93;
+sms:
+  text: "The following items have been checked out: {{ ci.titles }}. Due {{ ci.due }}. Thank you for visiting &#91;% branch.branchname %&#93;."
+checkouts:
+----
+  - &#91;% checkout.issue_id %&#93;
+----
+---</pre>
+    <p><strong>CHECKIN (SMS)</strong></p>
+    <pre style="white-space: pre-wrap; background: #f7f7f7; border: 1px solid #ccc; padding: 0.75em;">---
+CirriusImpact: yes
+patron: &#91;% borrower.borrowernumber %&#93;
+sms:
+  text: "The following items have been checked in: {{ ci.titles }}. Thank you."
+old_checkouts:
+----
+  - &#91;% old_checkout.issue_id %&#93;
+----
+---</pre>
+    <p><strong>RENEWAL (SMS)</strong></p>
+    <pre style="white-space: pre-wrap; background: #f7f7f7; border: 1px solid #ccc; padding: 0.75em;">---
+CirriusImpact: yes
+patron: &#91;% borrower.borrowernumber %&#93;
+sms:
+  text: "The following items have been renewed: {{ ci.titles }}. New due date: {{ ci.due }}. Thank you for visiting &#91;% branch.branchname %&#93;."
+checkouts:
+----
+  - &#91;% checkout.issue_id %&#93;
+----
+---</pre>
+    <p class="hint">Phone notices use the same shape with <code>call:</code> / <code>script:</code> instead of <code>sms:</code> / <code>text:</code>. HOLDDGST uses <code>holds:</code> and <code>&#91;% hold.reserve_id %&#93;</code>.</p>
+  </fieldset>
 
-    <button type="submit" class="btn btn-primary">Save</button>
-  </form>
 </div>
 
 <script>
@@ -461,132 +508,3 @@ function copyPre(id) {
 </script>
 
 [% INCLUDE 'intranet-bottom.inc' %]
-
-<hr>
-<h3>Updated Examples</h3>
-<p>Use the sample YAML below. Only the block matching the message <em>transport</em> is exported (<code>call</code> for phone, <code>sms</code> for SMS, <code>email</code> for Email, <code>whatsapp</code> for WhatsApp).</p>
-<pre><code>
-Phone (Call) notice — sample YAML:
---------------------------------------------------
-CirriusImpact: yes
-items: &lt;&lt;biblio.title&gt;&gt;
-notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
-call:
-    to: "&lt;&lt;borrowers.phone&gt;&gt;,&lt;&lt;borrowers.smsalertnumber&gt;&gt;"
-    reference: "&lt;&lt;message.message_id&gt;&gt;"
-    script: "Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;. This is &lt;&lt;branches.branchname&gt;&gt;. You have holds ready for pickup:  &lt;&lt;biblio.title&gt;&gt;. Please pickup them up at &lt;&lt;branches.branchname&gt;&gt;. For questions, call &lt;&lt;branches.branchphone&gt;&gt;."
-    msgid: "&lt;&lt;reserves.reserve_id&gt;&gt;"
-    commType: 
-    language: "&lt;&lt;borrowers.lang&gt;&gt;"
-    notificationType: "&lt;&lt;message_type.transport&gt;&gt;"
-    notificationLevel: 
-    patronBarCode: "&lt;&lt;borrowers.cardnumber&gt;&gt;"
-    STAB_userSaluation: "&lt;&lt;borrowers.title&gt;&gt;"
-    patronFirstName: "&lt;&lt;borrowers.firstname&gt;&gt;"
-    patronLastName: "&lt;&lt;borrowers.surname&gt;&gt;"
-    phone: "&lt;&lt;borrowers.phone&gt;&gt;"
-    email: "&lt;&lt;borrowers.email&gt;&gt;"
-    branch: "&lt;&lt;branches.branchcode&gt;&gt;"
-    branchname: "&lt;&lt;branches.branchname&gt;&gt;"
-    itemsID: "&lt;&lt;reserves.biblionumber&gt;&gt;"
-    date: "&lt;&lt;reserves.waitingdate&gt;&gt;"
-    title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
-    DeliveryOptionID: 
-    LanguageID: 
-    NotificationTypeID: 
-    ReportingOrgID: 
-    PatronID: "&lt;&lt;borrowers.borrowernumber&gt;&gt;"
-    ItemRecordID: 
-    RequestID: "&lt;&lt;reserves.reserve_id&gt;&gt;"
-    PickupAreaDescription: "&lt;&lt;branches.pickup_location&gt;&gt;"
-    TxnID: 
-    AccountBalance: 
-
-SMS notice — sample YAML:
---------------------------------------------------
-CirriusImpact: yes
-items: &lt;&lt;biblio.title&gt;&gt;
-notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
-sms:
-  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
-  reference: &lt;&lt;message.message_id&gt;&gt;
-  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
-  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
-  commType:
-  language: &lt;&lt;borrowers.lang&gt;&gt;
-  notificationType: &lt;&lt;message_type.transport&gt;&gt;
-  notificationLevel:
-  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
-  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
-  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
-  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
-  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
-  email: &lt;&lt;borrowers.email&gt;&gt;
-  branch: &lt;&lt;branches.branchcode&gt;&gt;
-  branchname: &lt;&lt;branches.branchname&gt;&gt;
-  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
-  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
-  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
-  DeliveryOptionID:
-  LanguageID:
-  NotificationTypeID:
-  ReportingOrgID:
-  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
-  ItemRecordID:
-  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
-  PickupAreaDescription: "&quot;&lt;&lt;branches.pickup_location&gt;&gt;&quot;"
-  TxnID:
-  AccountBalance:
-
-Email notice — sample YAML (extrapolated):
---------------------------------------------------
-CirriusImpact: yes
-items: &lt;&lt;biblio.title&gt;&gt;
-notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
-email:
-  to: &lt;&lt;borrowers.email&gt;&gt;
-  reference: &lt;&lt;message.message_id&gt;&gt;
-  subject: "&lt;&lt;message.subject&gt;&gt;"
-  html: "&lt;p&gt;Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;,&lt;/p&gt;&lt;p&gt;You have holds ready for pickup: &lt;strong&gt;&lt;&lt;biblio.title&gt;&gt;&lt;/strong&gt; at &lt;strong&gt;&lt;&lt;branches.branchname&gt;&gt;&lt;/strong&gt;.&lt;/p&gt;&lt;p&gt;Questions? Call &lt;&lt;branches.branchphone&gt;&gt;.&lt;/p&gt;"
-  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
-  language: &lt;&lt;borrowers.lang&gt;&gt;
-  notificationType: &lt;&lt;message_type.transport&gt;&gt;
-  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
-  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
-  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
-  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
-  branch: &lt;&lt;branches.branchcode&gt;&gt;
-  branchname: &lt;&lt;branches.branchname&gt;&gt;
-  branchphone: &lt;&lt;branches.branchphone&gt;&gt;
-  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
-  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
-  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
-  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
-  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
-
-WhatsApp notice — sample YAML (extrapolated):
---------------------------------------------------
-CirriusImpact: yes
-items: &lt;&lt;biblio.title&gt;&gt;
-notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
-whatsapp:
-  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
-  reference: &lt;&lt;message.message_id&gt;&gt;
-  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
-  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
-  language: &lt;&lt;borrowers.lang&gt;&gt;
-  notificationType: &lt;&lt;message_type.transport&gt;&gt;
-  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
-  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
-  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
-  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
-  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
-  email: &lt;&lt;borrowers.email&gt;&gt;
-  branch: &lt;&lt;branches.branchcode&gt;&gt;
-  branchname: &lt;&lt;branches.branchname&gt;&gt;
-  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
-  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
-  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
-  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
-  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
-</code></pre>

@@ -70,7 +70,7 @@ Notices for an unchecked branch/service are **not exported**; those SMS/phone `m
 #### Features
 
 - **Skip calling ODUE if patron has SMS or Email**
-- **Include messageText column in CSV output**
+- **Include messageText column in CSV output** — on by default. Uncheck it and Save to leave the column empty.
 
 Click **Save**.
 
@@ -103,7 +103,7 @@ sudo koha-shell INSTANCE -c \
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "<existing notice text from Koha>"
 ---
@@ -111,7 +111,7 @@ sms:
 [%# ...archived original lines... %]
 ```
 
-Phone notices use `call: script:` instead of `sms: text:`. Notices that already contain `CirriusImpact: yes` are skipped. Rows with no existing text are skipped (nothing to wrap).
+Phone notices use `call: script:` instead of `sms: text:`. Notices that already contain `CirriusImpact: yes` are skipped. A transport with no notice text yet gets the canned template. CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are rebuilt so Koha’s `----` repeat stays outside the sentence. The installer does not change `letter.name`; every transport of a code keeps one name.
 
 #### Remove / revert
 
@@ -243,7 +243,7 @@ If you prefer not to use the installer, create or edit notices in **Tools > Noti
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms_text: Your custom SMS message here
 ---
 ```
@@ -253,7 +253,7 @@ sms_text: Your custom SMS message here
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 sms:
   text: "[% branch.branchname %] Hold ready: [% biblio.title %]. Questions? Call [% branch.branchphone %]"

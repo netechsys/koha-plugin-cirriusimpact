@@ -1,3 +1,17 @@
+## 1.3.8 - 2026-10-15
+
+### Configure, claim, and notice installer
+- **FIXED:** Configure **Save** was outside the form because Install templates nested a second form inside it. Message Text and the other feature fields now submit with Save.
+- **FIXED:** A loopback Bootstrap API URL is rejected. Claim stays on `https://configportal.cgsis.com/koha-bootstrap/v1/claim`.
+- **CHANGED:** **Include messageText** is on when it has never been saved. Uncheck and Save to leave the column empty. A claim does the same unless the library config is explicitly off.
+- **FIXED:** The installer no longer rewrites `letter.name` or `letter.title` on update. New rows copy the name already used for that letter code, and every transport of the code is kept on one name.
+- **FIXED:** A transport with no existing notice gets the canned template instead of being skipped.
+- **FIXED:** Wrapping CHECKOUT, CHECKIN, RENEWAL, or HOLDDGST rebuilds the letter so the `----` repeat stays outside the SMS/phone sentence.
+- **FIXED:** Canned notices and the wrapper use `[% borrower.borrowernumber %]`.
+- **FIXED:** A queue letter whose `----` split glued `patron: sms:` is repaired, and the CSV `messageText` is the quoted SMS or phone sentence from that letter. A CirriusImpact letter is not replaced with a generated fallback sentence.
+- **ADDED:** Configure shows CHECKOUT, CHECKIN, and RENEWAL templates that can be copied into Koha’s Notices tool.
+- **DOCS:** RELEASE_NOTES_v1.3.8, INSTALL, QUICKSTART, README, BYWATER_SUPPORTED_NOTICES.
+
 ## 1.3.7 - 2026-10-06
 
 ### Production claim endpoint

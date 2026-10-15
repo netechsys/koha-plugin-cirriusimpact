@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.7**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.8**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.7.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.8.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -96,7 +96,7 @@ On **Save**, the matrix syncs to the Configuration Portal (requires a successful
 | Option | Purpose |
 |--------|---------|
 | **Skip calling ODUE if patron has SMS or Email** | Suppress voice when SMS/email preference exists |
-| **Include messageText column in CSV output** | Larger CSV; include full rendered text |
+| **Include messageText column in CSV output** | On unless you uncheck it and Save. Puts the notice sentence in the CSV |
 
 Click **Save**.
 
@@ -131,7 +131,10 @@ Defaults/Consortia wrap your existing notice text and archive the original in `[
 - Wrap stock letter `CODE` at `branchcode=''`
 - Services: SMS and phone
 - Languages: `default`, `en`, `es-ES`, `fr-CA`
-- Skip notices that already have `CirriusImpact: yes` or have no text
+- Skip notices that already have `CirriusImpact: yes`
+- A transport with no notice text yet gets the canned template, so SMS can be started without an existing SMS letter
+- CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are rebuilt so the `----` repeat stays outside the sentence
+- `letter.name` is left unchanged and kept the same across transports
 
 Templates cover HOLD, HOLDDGST, CHECKOUT, CHECKIN, ODUE/ODUE2/ODUE3, PREDUE/PREDUEDGST, HOLD_CHANGED, HOLD_REMINDER, RENEWAL, MEMBERSHIP_EXPIRY, MEMBERSHIP_RENEWED, WELCOME, and more.
 
@@ -231,7 +234,7 @@ For multilingual notices, enable **TranslateNotices** and add `en` / `es-ES` / `
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 sms:
   text: "[% branch.branchcode %]: [% IF holds.size > 1 %][% holds.size %] holds ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Hold ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]"
@@ -242,7 +245,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call 555-0100."
@@ -259,7 +262,7 @@ Koha builds HOLDDGST **incrementally**: each hold filled while the notice is pen
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Ready for pickup: {{ ci.titles }}. Pickup by {{ ci.due }}."
 holds:
@@ -273,7 +276,7 @@ holds:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are ready for pickup: {{ ci.titles_comma }}. Pickup by {{ ci.due }}. Call [% branch.branchphone %]."
 holds:
@@ -291,7 +294,7 @@ Koha builds CHECKOUT **incrementally**: each checkout appends the body between t
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Checked out: {{ ci.titles }}. Due {{ ci.due }}."
 checkouts:
@@ -305,7 +308,7 @@ checkouts:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You checked out: {{ ci.titles_comma }}. Due {{ ci.due }}. Thank you!"
 checkouts:
@@ -323,7 +326,7 @@ Koha builds CHECKIN **incrementally** from `old_issues`, so the body uses `old_c
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Checked in: {{ ci.titles }}. Thank you!"
 old_checkouts:
@@ -337,7 +340,7 @@ old_checkouts:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items were checked in: {{ ci.titles_comma }}. Thank you!"
 old_checkouts:
@@ -355,7 +358,7 @@ Koha builds RENEWAL **incrementally** (requires the **RenewalSendNotice** system
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Renewed: {{ ci.titles }}. New due date: {{ ci.due }}. Call [% branch.branchphone %]."
 checkouts:
@@ -369,7 +372,7 @@ checkouts:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items have been renewed: {{ ci.titles_comma }}. The new due date is {{ ci.due }}. Call [% branch.branchphone %]."
 checkouts:
@@ -387,7 +390,7 @@ Koha renders PREDUEDGST **all at once** (`advance_notices.pl`) and passes every 
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Reminder - due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -398,7 +401,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that the following items are due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -413,7 +416,7 @@ Same as PREDUEDGST, for items due today.
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -424,7 +427,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -439,7 +442,7 @@ Koha renders ODUE **all at once** (`overdue_notices.pl`) and passes the patron's
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -450,7 +453,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
@@ -465,7 +468,7 @@ Koha renders AUTO_RENEWALS_DGST **all at once** (`automatic_renewals.pl`) with e
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
@@ -476,7 +479,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
@@ -489,7 +492,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew."
 ---
@@ -499,7 +502,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] is due [% issue.date_due | $KohaDates %]. Please return or renew. Call 555-0100."
 ---
@@ -513,7 +516,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Your hold for [% biblio.title %] has changed status. Check your account for details."
 ---
@@ -523,7 +526,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your hold for [% biblio.title %] has changed status. Please check your account for details. Call 555-0100."
 ---
@@ -533,7 +536,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: [% IF holds && holds.size > 1 %][% holds.size %] holds have changed status: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Your hold for [% biblio.title %] has changed status[% END %]. Check your account for details."
 ---
@@ -543,7 +546,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. [% IF holds && holds.size > 1 %][% holds.size %] holds have changed status: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]Your hold for [% biblio.title %] has changed status[% END %]. Please check your account for details. Call 555-0100."
 ---
@@ -553,7 +556,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reminder: You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
 ---
@@ -563,7 +566,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder: You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %]. Call 555-0100."
 ---
@@ -573,7 +576,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reminder: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %]. Expires [% holds.0.expirationdate | $KohaDates %][% ELSE %]You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %][% END %]."
 ---
@@ -583,7 +586,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Reminder: [% IF holds && holds.size > 1 %]You have [% holds.size %] holds ready for pickup: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %]. Expires [% holds.0.expirationdate | $KohaDates %][% ELSE %]You have a hold for [% biblio.title %] ready for pickup. Expires [% hold.expirationdate | $KohaDates %][% END %]. Call 555-0100."
 ---
@@ -593,7 +596,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Your membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services."
 ---
@@ -603,7 +606,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew to continue using library services. Call 555-0100."
 ---
@@ -613,7 +616,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Your membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
 ---
@@ -623,7 +626,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. [% branch.branchname %]. Your membership has been renewed. New expiry date: [% borrower.dateexpiry | $KohaDates %]. Thank you! Call 555-0100."
 ---
@@ -633,7 +636,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Welcome to [% branch.branchname %]! Your library card number is [% borrower.cardnumber %]. Visit us soon!"
 ---
@@ -643,7 +646,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. Welcome to [% branch.branchname %]! Your library card number is [% borrower.cardnumber %]. We're excited to have you as a member. Call 555-0100."
 ---
@@ -655,7 +658,7 @@ call:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Credit of $[% account.amount %] applied to your account. Description: [% account.description %]. New balance: $[% account.amountoutstanding %]."
 ---
@@ -665,7 +668,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Charge of $[% account.amount %] added to your account. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
 ---
@@ -675,7 +678,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Payment of $[% account.amount %] received. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
 ---
@@ -685,7 +688,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Account write-off of $[% account.amount %] processed. Description: [% account.description %]. Outstanding balance: $[% account.amountoutstanding %]."
 ---
@@ -695,7 +698,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Account Summary - Outstanding balance: $[% account.total_balance %]. [% account.transaction_count %] outstanding transactions. Please pay at your convenience."
 ---
@@ -705,7 +708,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Hold placed for [% biblio.title %]. You will be notified when ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
 ---
@@ -715,7 +718,7 @@ sms:
 ```yaml
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Hold placed for [% biblio.title %]. You will be notified when ready for pickup. Expires [% hold.expirationdate | $KohaDates %]."
 ---

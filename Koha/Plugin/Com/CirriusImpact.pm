@@ -53,14 +53,14 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.7";
+our $VERSION = "1.3.8";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
     name            => 'CI Management Services - CirriusImpact',
     author          => 'Terry Rossio',
     date_authored   => '2025-08-12',
-    date_updated    => '2026-10-06',
+    date_updated    => '2026-10-15',
     minimum_version => $MINIMUM_VERSION,
     maximum_version => undef,
     version         => $VERSION,
@@ -103,6 +103,28 @@ sub new {
 }
 
 our $default_bootstrap_api_url = 'https://configportal.cgsis.com/koha-bootstrap/v1/claim';
+
+# Loopback addresses are the claim service talking to a portal on the same
+# machine. They are never a library-facing claim URL.
+sub _ci_public_bootstrap_url {
+    my ( $self, @candidates ) = @_;
+    for my $url (@candidates) {
+        next unless defined $url;
+        $url =~ s/^\s+|\s+$//g;
+        next unless length $url;
+        next if $url =~ m{\Ahttps?://(?:127\.0\.0\.1|localhost|\[::1\])(?:[:/]|\z)}i;
+        return $url;
+    }
+    return $default_bootstrap_api_url;
+}
+
+# Unset means on. An explicit 0 from Save or claim leaves the column empty.
+sub _ci_include_messagetext_enabled {
+    my ($self) = @_;
+    my $v = $self->retrieve_data('include_messagetext');
+    return 1 if !defined $v || $v eq '';
+    return $v ? 1 : 0;
+}
 
 sub configure {
     my ($self, $args) = @_;
@@ -165,14 +187,15 @@ sub configure {
             enable_sms                         => $any_sms ? 1 : 0,
             enable_email                       => 0,
             enable_whatsapp                    => 0,
-            include_messagetext                => $include_messagetext,
+            include_messagetext                => $include_messagetext ? 1 : 0,
             production_data                    => scalar $cgi,
             section_order                      => scalar $cgi->param('section_order') || 'message_type,patron,items,call,sms,message',
             enabled_branches                   => $enabled_branches,
             branch_services                    => $branch_services,
-            bootstrap_api_url                  => scalar $cgi->param('bootstrap_api_url')
-              || $self->retrieve_data('bootstrap_api_url')
-              || $default_bootstrap_api_url,
+            bootstrap_api_url                  => $self->_ci_public_bootstrap_url(
+                scalar $cgi->param('bootstrap_api_url'),
+                $self->retrieve_data('bootstrap_api_url'),
+            ),
             bootstrap_library_id               => scalar $cgi->param('bootstrap_library_id')
               || $self->retrieve_data('bootstrap_library_id'),
         );
@@ -360,9 +383,10 @@ sub _ci_configure_remove_templates {
 sub _ci_claim_bootstrap {
     my ( $self, $cgi ) = @_;
 
-    my $api_url = scalar $cgi->param('bootstrap_api_url');
-    $api_url = $api_url || $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url;
-    $api_url =~ s/^\s+|\s+$//g;
+    my $api_url = $self->_ci_public_bootstrap_url(
+        scalar $cgi->param('bootstrap_api_url'),
+        $self->retrieve_data('bootstrap_api_url'),
+    );
 
     my $library_id = scalar $cgi->param('bootstrap_library_id');
     $library_id = $library_id // '';
@@ -869,12 +893,12 @@ sub _ci_configure_template_params {
         skip_odue_if_other_if_sms_or_email => $self->retrieve_data('skip_odue_if_other_if_sms_or_email'),
         enable_phone                       => $self->retrieve_data('enable_phone'),
         enable_sms                         => $self->retrieve_data('enable_sms'),
-        include_messagetext                => $self->retrieve_data('include_messagetext'),
+        include_messagetext                => $self->_ci_include_messagetext_enabled,
         consortia_mode                     => $consortia_mode,
         production_data                    => $self,
         section_order                      => $self->retrieve_data('section_order') || 'message_type,patron,items,call,sms,message',
         libraries                          => $self->_ci_libraries_for_configure,
-        bootstrap_api_url                  => $self->retrieve_data('bootstrap_api_url') || $default_bootstrap_api_url,
+        bootstrap_api_url                  => $self->_ci_public_bootstrap_url( $self->retrieve_data('bootstrap_api_url') ),
         bootstrap_library_id               => $self->retrieve_data('bootstrap_library_id'),
         bootstrap_claimed_at               => $self->retrieve_data('bootstrap_claimed_at'),
         template_upgrade_version           => $self->retrieve_data('template_upgrade_version'),
@@ -1242,6 +1266,29 @@ sub _normalize_cirriusimpact_yaml_content {
     return "---\n$body\n---\n";
 }
 
+# Koha's ---- split deletes the newline after an empty patron value and leaves
+# "patron: sms:" which YAML rejects. Put the transport key back on its own line.
+sub _repair_glued_patron_key {
+    my ($content) = @_;
+    return $content unless defined $content;
+    $content =~ s/^([ \t]*patron:)[ \t]+(sms|call|email|whatsapp):[ \t]*$/$1\n$2:/mg;
+    return $content;
+}
+
+# Patron-facing sentence inside a CirriusImpact letter. Returns undef when the
+# content is not a CI document or the quoted field is missing.
+sub _ci_extract_quoted_field {
+    my ( $content, $field ) = @_;
+    return undef unless defined $content && defined $field;
+    return undef unless $content =~ /CirriusImpact:\s*yes/i;
+    return undef unless $content =~ /(?:^|\n)[ \t]*\Q$field\E:[ \t]*"((?:\\.|[^"\\])*)"/s;
+    my $text = $1;
+    $text =~ s/\\"/"/g;
+    $text =~ s/\\n/\n/g;
+    $text =~ s/\\t/\t/g;
+    return $text;
+}
+
 sub _recover_inline_cirriusimpact_yaml {
     my ($content) = @_;
     return undef unless defined $content && $content =~ /CirriusImpact:\s*yes/i;
@@ -1271,6 +1318,8 @@ sub _load_cirriusimpact_yaml_documents {
     my ($self, $content, $log, $message_id) = @_;
     # Koha leaves the header/body/footer "----" markers in until a second event is appended.
     $content =~ s/^[ \t]*----[ \t]*(?:\r?\n|\z)//mg if defined $content;
+    # An empty [% borrowernumber %] plus a ---- split glues the next key onto patron.
+    $content = _repair_glued_patron_key($content);
     $content = _normalize_cirriusimpact_yaml_content($content);
 
     my @yamls;
@@ -1385,6 +1434,12 @@ sub _ci_apply_transport_fallback_text {
 
     if ($transport eq 'sms') {
         return if defined $data->{sms}->{text} && $data->{sms}->{text} ne '';
+        my $queue = $data->{message_type}->{queue_content} // '';
+        if ( $queue =~ /CirriusImpact:\s*yes/i ) {
+            my $extracted = _ci_extract_quoted_field( $queue, 'text' );
+            $data->{sms}->{text} = ( defined $extracted && $extracted ne '' ) ? $extracted : $queue;
+            return;
+        }
 
         my $tpl = $self->_get_notice_template($letter_code, 'sms');
         if ($tpl) {
@@ -1403,6 +1458,12 @@ sub _ci_apply_transport_fallback_text {
     if ($transport eq 'phone') {
         $data->{call} //= {};
         return if defined $data->{call}->{script} && $data->{call}->{script} ne '';
+        my $queue = $data->{message_type}->{queue_content} // '';
+        if ( $queue =~ /CirriusImpact:\s*yes/i ) {
+            my $extracted = _ci_extract_quoted_field( $queue, 'script' );
+            $data->{call}->{script} = ( defined $extracted && $extracted ne '' ) ? $extracted : $queue;
+            return;
+        }
 
         my $tpl = $self->_get_notice_template($letter_code, 'phone');
         if ($tpl) {
@@ -1800,7 +1861,7 @@ sub _generate_csv_output {
     
     # Populate messageText only when enabled. Koha renders the correct
     # branch/library context before export, so this is safe in both modes.
-    my $include_messagetext = $self->retrieve_data('include_messagetext');
+    my $include_messagetext = $self->_ci_include_messagetext_enabled;
     
     my @csv_lines;
     push @csv_lines, join(',', @headers);
@@ -1902,6 +1963,11 @@ sub _generate_csv_output {
                 $message_text = $transport_section->{body} || $transport_section->{subject} || '';
             } elsif ($transport eq 'whatsapp') {
                 $message_text = $transport_section->{text} || '';
+            }
+            if ( $message_text =~ /CirriusImpact:\s*yes/i ) {
+                my $field = $transport eq 'phone' ? 'script' : ( $transport eq 'email' ? 'body' : 'text' );
+                my $extracted = _ci_extract_quoted_field( $message_text, $field );
+                $message_text = $extracted if defined $extracted && $extracted ne '';
             }
             # SMS keeps the library's dateformat; voice speaks the month name.
             $message_text = $self->_ci_speak_dates_in_text( $message_text, $row_data{language} )
@@ -2089,6 +2155,7 @@ sub before_send_messages {
                     yaml_doc_index => $yaml_doc_index,  # Track which YAML doc this is
                     time_queued => $m->time_queued,
                     transport   => $m->message_transport_type,
+                    queue_content => $m->content // '',
                 };
                 $yaml_doc_index++;
                 $data->{message} = $self->scrub_message($m->unblessed);

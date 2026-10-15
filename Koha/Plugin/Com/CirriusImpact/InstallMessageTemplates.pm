@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.7';
+our $VERSION = '1.3.8';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -80,38 +80,82 @@ sub _tt_comment_block {
     return join( "\n", @out );
 }
 
+# Koha splits CHECKOUT, CHECKIN, RENEWAL and HOLDDGST on a literal "----".
+# The repeat body has to be the id the plugin collects; the sentence stays outside.
+sub _incremental_list_for_code {
+    my ($code) = @_;
+    $code = '' unless defined $code;
+    $code =~ s/-CI\z//;
+    return ( 'checkouts',     'checkout.issue_id' )     if $code eq 'CHECKOUT' || $code eq 'RENEWAL';
+    return ( 'old_checkouts', 'old_checkout.issue_id' ) if $code eq 'CHECKIN';
+    return ( 'holds',         'hold.reserve_id' )       if $code eq 'HOLDDGST';
+    return;
+}
+
 # Wrap existing Koha notice text in CirriusImpact YAML for plugin export.
 # SMS → sms.text; phone → call.script. Appends original as TT comments.
+# Incremental notices are rebuilt so the ---- markers stay outside the sentence.
 sub _wrap_existing_as_ci {
-    my ( $original, $transport ) = @_;
+    my ( $original, $transport, $code ) = @_;
     my $body = defined $original ? $original : '';
     $body =~ s/\A\s+//;
     $body =~ s/\s+\z//;
 
-    my $quoted = _yaml_double_quote($body);
     my $yaml;
-    # Build with single-quoted heredoc so Template Toolkit "[% %]" is literal Perl text.
-    if ( ( $transport // '' ) eq 'phone' ) {
-        $yaml = <<'YAML';
+    my ( $list_key, $id_path ) = _incremental_list_for_code($code);
+    if ( $list_key && $body =~ /----/ ) {
+        my ( $header, undef, $footer ) = split( /----\r?\n?/, $body, 3 );
+        $header = '' unless defined $header;
+        $footer = '' unless defined $footer;
+        $header =~ s/\s+\z//;
+        $footer =~ s/\A\s+//;
+        $footer =~ s/\s+\z//;
+        my $sentence = $header;
+        if ( $sentence !~ /\{\{\s*ci\.titles/ ) {
+            $sentence .= ( $sentence =~ /\S/ ? ' ' : '' ) . '{{ ci.titles }}';
+        }
+        if ( $footer =~ /\S/ ) {
+            $sentence .= ( $sentence =~ /[.!?]\s*\z/ ? ' ' : '. ' ) . $footer;
+        }
+        my $quoted  = _yaml_double_quote($sentence);
+        my $field   = ( ( $transport // '' ) eq 'phone' ) ? 'script' : 'text';
+        my $section = ( ( $transport // '' ) eq 'phone' ) ? 'call'    : 'sms';
+        $yaml = <<"YAML";
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
-call:
-  script: __CI_BODY__
+patron: [% borrower.borrowernumber %]
+$section:
+  $field: $quoted
+$list_key:
+----
+  - [% $id_path %]
+----
 ---
 YAML
     }
     else {
-        $yaml = <<'YAML';
+        my $quoted = _yaml_double_quote($body);
+        if ( ( $transport // '' ) eq 'phone' ) {
+            $yaml = <<"YAML";
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
-sms:
-  text: __CI_BODY__
+patron: [% borrower.borrowernumber %]
+call:
+  script: $quoted
 ---
 YAML
+        }
+        else {
+            $yaml = <<"YAML";
+---
+CirriusImpact: yes
+patron: [% borrower.borrowernumber %]
+sms:
+  text: $quoted
+---
+YAML
+        }
     }
-    $yaml =~ s/__CI_BODY__/$quoted/;
     $yaml .= "\n" . _tt_comment_block($original) . "\n";
     return $yaml;
 }
@@ -260,7 +304,7 @@ my %TEMPLATES = (
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 sms:
   text: "[% branch.branchcode %]: [% IF holds.size > 1 %][% holds.size %] holds ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Hold ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]"
@@ -269,7 +313,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 sms:
   text: "[% branch.branchcode %]: [% IF holds.size > 1 %][% holds.size %] reservas listas: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Reserva lista: [% biblio.title %][% END %]. Retire antes del [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]"
@@ -278,7 +322,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 sms:
   text: "[% branch.branchcode %]: [% IF holds.size > 1 %][% holds.size %] reserves pretes: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %]; [% END %][% END %][% ELSE %]Reserve prete: [% biblio.title %][% END %]. Retirer avant le [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]"
@@ -294,7 +338,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] items ready: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]One item ready: [% biblio.title %][% END %]. Pickup by [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
@@ -303,7 +347,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] articulos listos: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]Un articulo listo: [% biblio.title %][% END %]. Retire antes del [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Llame al [% branch.branchphone %]."
@@ -312,7 +356,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 hold: [% hold.reserve_id %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% IF holds.size > 1 %][% holds.size %] documents prets: [% FOREACH h IN holds %][% h.biblio.title %][% UNLESS loop.last %], [% END %][% END %][% ELSE %]Un document pret: [% biblio.title %][% END %]. A retirer avant le [% holds.0.expirationdate || hold.expirationdate | $KohaDates %]. Appelez le [% branch.branchphone %]."
@@ -328,7 +372,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Ready for pickup: {{ ci.titles }}. Pickup by {{ ci.due }}."
 holds:
@@ -340,7 +384,7 @@ holds:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Listo para retirar: {{ ci.titles }}. Retire antes del {{ ci.due }}."
 holds:
@@ -352,7 +396,7 @@ holds:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Pret a retirer: {{ ci.titles }}. Retirer avant le {{ ci.due }}."
 holds:
@@ -371,7 +415,7 @@ holds:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are ready for pickup: {{ ci.titles_comma }}. Pickup by {{ ci.due }}. Call [% branch.branchphone %]."
 holds:
@@ -383,7 +427,7 @@ holds:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Listo para retirar: {{ ci.titles_comma }}. Retire antes del {{ ci.due }}. Llame al [% branch.branchphone %]."
 holds:
@@ -395,7 +439,7 @@ holds:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Pret a retirer: {{ ci.titles_comma }}. A retirer avant le {{ ci.due }}. Appelez le [% branch.branchphone %]."
 holds:
@@ -414,7 +458,7 @@ holds:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Checked out: {{ ci.titles }}. Due {{ ci.due }}."
 checkouts:
@@ -426,7 +470,7 @@ checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Prestamo: {{ ci.titles }}. Vence {{ ci.due }}."
 checkouts:
@@ -438,7 +482,7 @@ checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Pret: {{ ci.titles }}. Echeance {{ ci.due }}."
 checkouts:
@@ -457,7 +501,7 @@ checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You checked out: {{ ci.titles_comma }}. Due {{ ci.due }}. Thank you!"
 checkouts:
@@ -469,7 +513,7 @@ checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Prestamo de: {{ ci.titles_comma }}. Vence {{ ci.due }}. Gracias!"
 checkouts:
@@ -481,7 +525,7 @@ checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Pret de: {{ ci.titles_comma }}. Echeance {{ ci.due }}. Merci!"
 checkouts:
@@ -500,7 +544,7 @@ checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Checked in: {{ ci.titles }}. Thank you!"
 old_checkouts:
@@ -512,7 +556,7 @@ old_checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Devolucion: {{ ci.titles }}. Gracias!"
 old_checkouts:
@@ -524,7 +568,7 @@ old_checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Retour: {{ ci.titles }}. Merci!"
 old_checkouts:
@@ -543,7 +587,7 @@ old_checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items were checked in: {{ ci.titles_comma }}. Thank you!"
 old_checkouts:
@@ -555,7 +599,7 @@ old_checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Se devolvio: {{ ci.titles_comma }}. Gracias!"
 old_checkouts:
@@ -567,7 +611,7 @@ old_checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Retour enregistre: {{ ci.titles_comma }}. Merci!"
 old_checkouts:
@@ -586,7 +630,7 @@ old_checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -595,7 +639,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
@@ -604,7 +648,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
@@ -620,7 +664,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience. Call [% branch.branchphone %]."
@@ -629,7 +673,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Tiene articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
@@ -638,7 +682,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
@@ -654,7 +698,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Second notice - Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -663,7 +707,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: 2do aviso - Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve ya. Llame [% branch.branchphone %]."
@@ -672,7 +716,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: 2e avis - En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez maintenant. Appelez [% branch.branchphone %]."
@@ -688,7 +732,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. You have seriously overdue items: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return at your earliest convenience to avoid any additional fines. Call [% branch.branchphone %]."
@@ -697,7 +741,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Segundo aviso. Articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve ya. Llame al [% branch.branchphone %]."
@@ -706,7 +750,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Deuxieme avis. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez maintenant. Appelez le [% branch.branchphone %]."
@@ -722,7 +766,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Final notice - Overdue: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return to avoid additional charges. Call [% branch.branchphone %]."
@@ -731,7 +775,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Aviso final - Atraso: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve ya para evitar cargos. Llame [% branch.branchphone %]."
@@ -740,7 +784,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Avis final - En retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez [% branch.branchphone %]."
@@ -756,7 +800,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is the final overdue notice for: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew at your earliest convenience to avoid any additional charges. Call [% branch.branchphone %]."
@@ -765,7 +809,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Aviso final. Articulos atrasados: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve ya para evitar cargos. Llame al [% branch.branchphone %]."
@@ -774,7 +818,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH o IN overdues %][% o.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Avis final. Documents en retard: [% FOREACH o IN overdues %][% o.item.biblio.title | remove('[ /:;,.]+$') %] ([% o.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez maintenant pour eviter des frais. Appelez le [% branch.branchphone %]."
@@ -790,7 +834,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reminder - [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
@@ -798,7 +842,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Recordatorio - [% biblio.title %] vence [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame [% branch.branchphone %]."
 ---
@@ -806,7 +850,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Rappel - [% biblio.title %] echeance [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
 ---
@@ -821,7 +865,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that [% biblio.title %] is due on [% issue.date_due | $KohaDates %]. Please return or renew. Call [% branch.branchphone %]."
 ---
@@ -829,7 +873,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Recordatorio - [% biblio.title %] vence [% issue.date_due | $KohaDates %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
 ---
@@ -837,7 +881,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Rappel - [% biblio.title %] echeance [% issue.date_due | $KohaDates %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
 ---
@@ -852,7 +896,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Reminder - due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -861,7 +905,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Recordatorio - vencen pronto: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
@@ -870,7 +914,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Rappel - echeance proche: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
@@ -886,7 +930,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that the following items are due soon: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -895,7 +939,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Recordatorio - vencen pronto: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
@@ -904,7 +948,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Rappel - echeance proche: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
@@ -920,7 +964,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Hold status changed for [% biblio.title %]. Check your account for details. Call [% branch.branchphone %]."
 ---
@@ -928,7 +972,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Estado de reserva cambiado para [% biblio.title %]. Revise su cuenta. Llame [% branch.branchphone %]."
 ---
@@ -936,7 +980,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Statut de reserve change pour [% biblio.title %]. Verifiez votre compte. Appelez [% branch.branchphone %]."
 ---
@@ -951,7 +995,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -960,7 +1004,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Vencen hoy: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Devuelva o renueve. Llame [% branch.branchphone %]."
@@ -969,7 +1013,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Echeance aujourd'hui: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %]; [% END %][% END %]. Retournez ou renouvelez. Appelez [% branch.branchphone %]."
@@ -985,7 +1029,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There has been a hold status change for [% biblio.title %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
@@ -993,7 +1037,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. El estado de su reserva cambio para [% biblio.title %]. Revise su cuenta. Llame al [% branch.branchphone %]."
 ---
@@ -1001,7 +1045,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Le statut de votre reserve a change pour [% biblio.title %]. Verifiez votre compte. Appelez le [% branch.branchphone %]."
 ---
@@ -1016,7 +1060,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items are due today: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Please return or renew. Call [% branch.branchphone %]."
@@ -1025,7 +1069,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Vencen hoy: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Devuelva o renueve. Llame al [% branch.branchphone %]."
@@ -1034,7 +1078,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Echeance aujourd'hui: [% FOREACH c IN checkouts %][% c.title | remove('[ /:;,.]+$') %][% UNLESS loop.last %], [% END %][% END %]. Retournez ou renouvelez. Appelez le [% branch.branchphone %]."
@@ -1050,7 +1094,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reminder - hold ready: [% biblio.title %]. Pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---
@@ -1058,7 +1102,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Recordatorio - Reserva lista: [% biblio.title %]. Retire antes del [% hold.expirationdate | $KohaDates %]. Llame [% branch.branchphone %]."
 ---
@@ -1066,7 +1110,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Rappel - Reserve prete: [% biblio.title %]. Retirer avant le [% hold.expirationdate | $KohaDates %]. Appelez [% branch.branchphone %]."
 ---
@@ -1081,7 +1125,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. This is a reminder that a hold for [% biblio.title %] is ready for pickup by [% hold.expirationdate | $KohaDates %]. Call [% branch.branchphone %]."
 ---
@@ -1089,7 +1133,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Recordatorio - Reserva lista: [% biblio.title %]. Retire antes del [% hold.expirationdate | $KohaDates %]. Llame al [% branch.branchphone %]."
 ---
@@ -1097,7 +1141,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Rappel - Reserve prete: [% biblio.title %]. Retirer avant le [% hold.expirationdate | $KohaDates %]. Appelez le [% branch.branchphone %]."
 ---
@@ -1112,7 +1156,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Hold placed on [% biblio.title %]. You will be notified when ready for pickup. Call [% branch.branchphone %]."
 ---
@@ -1120,7 +1164,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reserva hecha para [% biblio.title %]. Le avisaremos cuando este lista. Llame [% branch.branchphone %]."
 ---
@@ -1128,7 +1172,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reserve placee pour [% biblio.title %]. Nous vous aviserons quand elle sera prete. Appelez [% branch.branchphone %]."
 ---
@@ -1143,7 +1187,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There is a hold placed for [% biblio.title %]. You will be notified when it is ready. Call [% branch.branchphone %]."
 ---
@@ -1151,7 +1195,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Reserva hecha para [% biblio.title %]. Le avisaremos cuando este lista. Llame al [% branch.branchphone %]."
 ---
@@ -1159,7 +1203,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Reserve placee pour [% biblio.title %]. Nous vous aviserons quand elle sera prete. Appelez le [% branch.branchphone %]."
 ---
@@ -1174,7 +1218,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Hold confirmed for [% biblio.title %]. You will be notified when ready for pickup. Call [% branch.branchphone %]."
 ---
@@ -1182,7 +1226,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reserva confirmada para [% biblio.title %]. Le avisaremos cuando este lista. Llame [% branch.branchphone %]."
 ---
@@ -1190,7 +1234,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Reserve confirmee pour [% biblio.title %]. Nous vous aviserons quand elle sera prete. Appelez [% branch.branchphone %]."
 ---
@@ -1205,7 +1249,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. There is a hold placed for [% biblio.title %]. You will be notified when it is ready. Call [% branch.branchphone %]."
 ---
@@ -1213,7 +1257,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Reserva confirmada para [% biblio.title %]. Le avisaremos cuando este lista. Llame al [% branch.branchphone %]."
 ---
@@ -1221,7 +1265,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Reserve confirmee pour [% biblio.title %]. Nous vous aviserons quand elle sera prete. Appelez le [% branch.branchphone %]."
 ---
@@ -1236,7 +1280,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 email:
   subject: "Hold Slip - [% biblio.title %]"
   body: "Hold slip for [% biblio.title %]. Patron: [% borrower.firstname %] [% borrower.surname %]. Pickup by: [% hold.expirationdate | $KohaDates %]."
@@ -1245,7 +1289,7 @@ email:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 email:
   subject: "Comprobante de reserva - [% biblio.title %]"
   body: "Comprobante de reserva para [% biblio.title %]. Patron: [% borrower.firstname %] [% borrower.surname %]. Retiro antes del: [% hold.expirationdate | $KohaDates %]."
@@ -1254,7 +1298,7 @@ email:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 email:
   subject: "Bon de reserve - [% biblio.title %]"
   body: "Bon de reserve pour [% biblio.title %]. Usager: [% borrower.firstname %] [% borrower.surname %]. A retirer avant le: [% hold.expirationdate | $KohaDates %]."
@@ -1270,7 +1314,7 @@ email:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Renewed: {{ ci.titles }}. New due date: {{ ci.due }}. Call [% branch.branchphone %]."
 checkouts:
@@ -1282,7 +1326,7 @@ checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Renovado: {{ ci.titles }}. Nueva fecha: {{ ci.due }}. Llame [% branch.branchphone %]."
 checkouts:
@@ -1294,7 +1338,7 @@ checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Renouvele: {{ ci.titles }}. Nouvelle echeance: {{ ci.due }}. Appelez [% branch.branchphone %]."
 checkouts:
@@ -1313,7 +1357,7 @@ checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. The following items have been renewed: {{ ci.titles_comma }}. The new due date is {{ ci.due }}. Call [% branch.branchphone %]."
 checkouts:
@@ -1325,7 +1369,7 @@ checkouts:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Se renovo: {{ ci.titles_comma }}. Nueva fecha: {{ ci.due }}. Llame al [% branch.branchphone %]."
 checkouts:
@@ -1337,7 +1381,7 @@ checkouts:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement: {{ ci.titles_comma }}. Nouvelle echeance: {{ ci.due }}. Appelez le [% branch.branchphone %]."
 checkouts:
@@ -1356,7 +1400,7 @@ checkouts:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: [% biblio.title %] auto-renewed. New due date: [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---
@@ -1364,7 +1408,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: [% biblio.title %] renovado automaticamente. Nueva fecha: [% issue.date_due | $KohaDates %]. Llame [% branch.branchphone %]."
 ---
@@ -1372,7 +1416,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: [% biblio.title %] renouvele automatiquement. Nouvelle echeance: [% issue.date_due | $KohaDates %]. Appelez [% branch.branchphone %]."
 ---
@@ -1387,7 +1431,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. [% biblio.title %] has been auto renewed. The new due date is [% issue.date_due | $KohaDates %]. Call [% branch.branchphone %]."
 ---
@@ -1395,7 +1439,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] fue renovado automaticamente. Nueva fecha: [% issue.date_due | $KohaDates %]. Llame al [% branch.branchphone %]."
 ---
@@ -1403,7 +1447,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. [% biblio.title %] a ete renouvele automatiquement. Nouvelle echeance: [% issue.date_due | $KohaDates %]. Appelez le [% branch.branchphone %]."
 ---
@@ -1418,7 +1462,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
@@ -1427,7 +1471,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Llame [% branch.branchphone %]."
@@ -1436,7 +1480,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 sms:
   text: "[% branch.branchcode %]: Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Appelez [% branch.branchphone %]."
@@ -1452,7 +1496,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
@@ -1461,7 +1505,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Llame al [% branch.branchphone %]."
@@ -1470,7 +1514,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Appelez le [% branch.branchphone %]."
@@ -1486,7 +1530,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Membership expires [% borrower.dateexpiry | $KohaDates %]. Please renew. Call [% branch.branchphone %]."
 ---
@@ -1494,7 +1538,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Su membresia vence [% borrower.dateexpiry | $KohaDates %]. Renueve para seguir usando la biblioteca. Llame [% branch.branchphone %]."
 ---
@@ -1502,7 +1546,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Votre abonnement expire le [% borrower.dateexpiry | $KohaDates %]. Renouvelez pour continuer. Appelez [% branch.branchphone %]."
 ---
@@ -1517,7 +1561,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Your membership is set to expire on [% borrower.dateexpiry | $KohaDates %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
@@ -1525,7 +1569,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Su membresia vence [% borrower.dateexpiry | $KohaDates %]. Renueve para seguir usando la biblioteca. Llame al [% branch.branchphone %]."
 ---
@@ -1533,7 +1577,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Votre abonnement expire le [% borrower.dateexpiry | $KohaDates %]. Renouvelez pour continuer. Appelez le [% branch.branchphone %]."
 ---
@@ -1548,7 +1592,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Membership renewed. New expiry: [% borrower.dateexpiry | $KohaDates %]. Thank you!"
 ---
@@ -1556,7 +1600,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Membresia renovada. Nueva fecha: [% borrower.dateexpiry | $KohaDates %]. Gracias!"
 ---
@@ -1564,7 +1608,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Abonnement renouvele. Nouvelle echeance: [% borrower.dateexpiry | $KohaDates %]. Merci!"
 ---
@@ -1579,7 +1623,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Your membership has auto renewed. The new expiration date is [% borrower.dateexpiry | $KohaDates %]. Please check your account for details. Call [% branch.branchphone %]."
 ---
@@ -1587,7 +1631,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Su membresia fue renovada. Nueva fecha: [% borrower.dateexpiry | $KohaDates %]. Gracias!"
 ---
@@ -1595,7 +1639,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Votre abonnement a ete renouvele. Nouvelle echeance: [% borrower.dateexpiry | $KohaDates %]. Merci!"
 ---
@@ -1610,7 +1654,7 @@ call:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Welcome to the library, [% borrower.firstname %]! Your membership is active. Visit us soon!"
 ---
@@ -1618,7 +1662,7 @@ sms:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Bienvenido a la biblioteca, [% borrower.firstname %]! Su membresia esta activa. Visitenos pronto!"
 ---
@@ -1626,7 +1670,7 @@ sms:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 sms:
   text: "[% branch.branchcode %]: Bienvenue a la bibliotheque, [% borrower.firstname %]! Votre abonnement est actif. A bientot!"
 ---
@@ -1641,7 +1685,7 @@ sms:
         'en' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Welcome to our library. Your membership is active. Please check your account for details. Call [% branch.branchphone %]."
 ---
@@ -1649,7 +1693,7 @@ call:
         'es-ES' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Bienvenido a la biblioteca! Su membresia esta activa. Esperamos servirle. Llame al [% branch.branchphone %]."
 ---
@@ -1657,7 +1701,7 @@ call:
         'fr-CA' => q{
 ---
 CirriusImpact: yes
-patron: [% borrowernumber %]
+patron: [% borrower.borrowernumber %]
 call:
   script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Bienvenue a la bibliotheque! Votre abonnement est actif. Au plaisir de vous servir. Appelez le [% branch.branchphone %]."
 ---
@@ -1665,6 +1709,35 @@ call:
         },
     },
 );
+
+# Koha groups every transport of a letter code under one name. Prefer the
+# library's original name over a name that is just the code.
+sub _harmonize_letter_name {
+    my ( $dbh, $module, $code, $branchcode ) = @_;
+    return unless $dbh && defined $code && $code ne '';
+    $branchcode = '' unless defined $branchcode;
+    my $sth = $dbh->prepare(q{
+        SELECT name FROM letter
+        WHERE module = ? AND code = ? AND branchcode = ?
+          AND name IS NOT NULL AND name <> ''
+    });
+    $sth->execute( $module, $code, $branchcode );
+    my @names;
+    while ( my ($name) = $sth->fetchrow_array ) {
+        push @names, $name;
+    }
+    $sth->finish();
+    return unless @names;
+    my ($chosen) = grep { $_ ne $code } @names;
+    $chosen = $names[0] unless defined $chosen && $chosen ne '';
+    my $upd = $dbh->prepare(q{
+        UPDATE letter SET name = ?
+        WHERE module = ? AND code = ? AND branchcode = ?
+          AND (name IS NULL OR name <> ?)
+    });
+    $upd->execute( $chosen, $module, $code, $branchcode, $chosen );
+    $upd->finish();
+}
 
 sub run {
     my (%opts) = @_;
@@ -1774,21 +1847,29 @@ sub run {
             my ($existing) = $fetch_sth->fetchrow_array;
             $fetch_sth->finish();
 
-            unless ( defined $existing && $existing =~ /\S/ ) {
-                _log(
-                    \@log_lines,
-                    "Skipped $name code=$code [$src] ($branch_label) — no existing notice text to wrap"
-                );
-                return 0;
+            if ( defined $existing && $existing =~ /\S/ ) {
+                if ( _already_ci_yaml($existing) ) {
+                    _log(
+                        \@log_lines,
+                        "Skipped $name code=$code [$src] ($branch_label) — already CirriusImpact YAML"
+                    );
+                    return 0;
+                }
+                $content = _wrap_existing_as_ci( $existing, $template->{transport}, $code );
             }
-            if ( _already_ci_yaml($existing) ) {
-                _log(
-                    \@log_lines,
-                    "Skipped $name code=$code [$src] ($branch_label) — already CirriusImpact YAML"
-                );
-                return 0;
+            else {
+                # No SMS/phone row yet. Install the canned notice so the library
+                # can start sending this transport without writing it from scratch.
+                $content = $content_for_lang->( $template, $lang );
+                unless ( defined $content && $content =~ /\S/ ) {
+                    _log(
+                        \@log_lines,
+                        "Skipped $name code=$code [$src] ($branch_label) — no existing notice and no canned content"
+                    );
+                    return 0;
+                }
+                $wrap_existing = 0;
             }
-            $content = _wrap_existing_as_ci( $existing, $template->{transport} );
         }
         else {
             $content = $content_for_lang->( $template, $lang );
@@ -1807,18 +1888,17 @@ sub run {
         my ($exists) = $check_sth->fetchrow_array;
         $check_sth->finish();
 
-        my $title = "$code - $template->{transport}";
-        my $template_name = $code;
-
         if ($exists) {
+            # Leave letter.name and letter.title alone. Koha shows one name for
+            # every transport of a code; rewriting it per install splits the UI.
             my $update_sth = $dbh->prepare(q{
                 UPDATE letter
-                SET content = ?, name = ?, title = ?
+                SET content = ?
                 WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
                   AND branchcode = ?
             });
             $update_sth->execute(
-                $content, $template_name, $title,
+                $content,
                 $template->{module}, $code, $template->{transport}, $lang, $branchcode
             );
             $update_sth->finish();
@@ -1829,7 +1909,18 @@ sub run {
             );
         }
         else {
-            # Wrap mode never inserts (no source text). Canned CI-templates may insert.
+            my $name_sth = $dbh->prepare(q{
+                SELECT name, title FROM letter
+                WHERE module = ? AND code = ? AND branchcode = ?
+                  AND name IS NOT NULL AND name <> ''
+                ORDER BY (name = ?) ASC
+                LIMIT 1
+            });
+            $name_sth->execute( $template->{module}, $code, $branchcode, $code );
+            my ( $sibling_name, $sibling_title ) = $name_sth->fetchrow_array;
+            $name_sth->finish();
+            my $template_name = ( defined $sibling_name && $sibling_name ne '' ) ? $sibling_name : $code;
+            my $title = ( defined $sibling_title && $sibling_title ne '' ) ? $sibling_title : $template_name;
             my $insert_sth = $dbh->prepare(q{
                 INSERT INTO letter (module, code, message_transport_type, content, title, name, branchcode, lang)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1841,6 +1932,7 @@ sub run {
             $insert_sth->finish();
             _log(\@log_lines, "Installed $name code=$code [$src] ($branch_label)");
         }
+        _harmonize_letter_name( $dbh, $template->{module}, $code, $branchcode );
         return 1;
     };
 
