@@ -133,7 +133,11 @@ sub configure {
     my $claim_message;
     my $claim_error;
 
-    if ( $cgi->param('claim') ) {
+    if ( $cgi->param('download_notice_review') ) {
+        $self->_ci_download_notice_review($cgi);
+        return;
+    }
+    elsif ( $cgi->param('claim') ) {
         my ( $ok, $msg ) = $self->_ci_claim_bootstrap($cgi);
         if ($ok) {
             $claim_message = $msg;
@@ -229,6 +233,50 @@ sub configure {
         claim_error   => $claim_error,
     ) );
     $self->output_html($template->output());
+}
+
+sub _ci_template_upgrade_review_rows {
+    my ($self) = @_;
+    my @labels = grep { length } split /,/, ( $self->retrieve_data('template_upgrade_customized') // '' );
+    my @rows;
+    my $ok = eval {
+        require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
+        for my $label (@labels) {
+            push @rows, {
+                label => Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::review_label_text($label),
+            };
+        }
+        1;
+    };
+    return \@rows if $ok && @rows;
+    return [ map { { label => $_ } } @labels ];
+}
+
+# Download an HTML comparison of notices the upgrade left in place.
+sub _ci_download_notice_review {
+    my ( $self, $cgi ) = @_;
+    my @labels = grep { length } split /,/, ( $self->retrieve_data('template_upgrade_customized') // '' );
+    my $html = eval {
+        require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
+        Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates::build_review_document(
+            labels => \@labels,
+        );
+    };
+    if ( $@ || !defined $html ) {
+        my $err = $@ // 'Unknown error';
+        $err =~ s/&/&amp;/g;
+        $err =~ s/</&lt;/g;
+        $err =~ s/>/&gt;/g;
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><p>The comparison could not be built. '
+          . $err . '</p></body></html>';
+    }
+    print $cgi->header(
+        -type       => 'text/html',
+        -charset    => 'UTF-8',
+        -attachment => 'cirriusimpact-notice-comparison.html',
+    );
+    print $html;
+    return;
 }
 
 # POST/GET from Configure → Install notice templates section.
@@ -904,6 +952,7 @@ sub _ci_configure_template_params {
         template_upgrade_version           => $self->retrieve_data('template_upgrade_version'),
         template_upgrade_updated           => $self->retrieve_data('template_upgrade_updated'),
         template_upgrade_customized        => [ grep { length } split /,/, ( $self->retrieve_data('template_upgrade_customized') // '' ) ],
+        template_upgrade_review            => $self->_ci_template_upgrade_review_rows,
         %extra,
     );
     if ( $consortia_mode eq 'independent' ) {

@@ -4,6 +4,7 @@
 - **FIXED:** Upgrading from v1.3.5–v1.3.7 no longer lists the shipped CHECKOUT, CHECKIN, RENEWAL, HOLDDGST, PREDUEDGST, AUTO_RENEWALS_DGST, and ODUE notices as locally edited. Those rows are the previous canned text and are rewritten to the current templates, including `[% borrower.borrowernumber %]`.
 - **FIXED:** A wrapped notice keeps the library's wording. The patron id tag is corrected, and a CHECKOUT, CHECKIN, RENEWAL, or HOLDDGST wrap whose repeat markers were inside the sentence is rebuilt from the archived original.
 - **UNCHANGED:** A notice whose wording is not a shipped CirriusImpact template stays in place and is still listed for review.
+- **ADDED:** Configure offers a comparison download for those notices: the library's message, the recommended message, and the edits that make the title and date export correctly.
 - **DOCS:** RELEASE_NOTES_v1.3.9.
 
 ## 1.3.8 - 2026-10-15

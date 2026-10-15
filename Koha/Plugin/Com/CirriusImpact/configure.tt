@@ -22,12 +22,24 @@
   [% END %]
   [% IF template_upgrade_customized.size %]
   <div class="alert alert-warning" style="margin: 1em 0; padding: 0.75em 1em; background: #fff3cd; border: 1px solid #ffeeba; color: #856404;">
-    <strong>Notice templates need review (v[% template_upgrade_version | html %]).</strong>
-    These notices do not match a CirriusImpact template, so the upgrade kept their wording. Koha builds CHECKOUT, CHECKIN, RENEWAL and HOLDDGST
-    incrementally, and PREDUEDGST, DUEDGST, AUTO_RENEWALS_DGST and ODUE* must loop over every item; see TEMPLATE_I18N.md for the multi-item template shapes.
+    <strong>
+      [% IF template_upgrade_customized.size == 1 %]
+      One notice was left as it is written in Koha (v[% template_upgrade_version | html %]).
+      [% ELSE %]
+      [% template_upgrade_customized.size | html %] notices were left as they are written in Koha (v[% template_upgrade_version | html %]).
+      [% END %]
+    </strong>
+    <p style="margin: 0.5em 0 0;">
+      CirriusImpact did not replace [% IF template_upgrade_customized.size == 1 %]this notice[% ELSE %]these notices[% END %]
+      because the wording is not a standard template. Download the comparison to see your message next to the recommended one,
+      and the changes that put the title and the date into the message patrons receive.
+    </p>
     <ul style="margin: 0.5em 0 0 1.5em;">
-      [% FOREACH row IN template_upgrade_customized %]<li>[% row | html %]</li>[% END %]
+      [% FOREACH row IN template_upgrade_review %]<li>[% row.label | html %]</li>[% END %]
     </ul>
+    <p style="margin: 0.75em 0 0;">
+      <a class="btn btn-default" href="?class=[% CLASS | html %]&amp;method=[% METHOD | html %]&amp;download_notice_review=1">Download comparison</a>
+    </p>
   </div>
   [% END %]
 

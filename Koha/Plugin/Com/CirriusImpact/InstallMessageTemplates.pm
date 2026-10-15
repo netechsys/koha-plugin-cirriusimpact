@@ -2321,6 +2321,331 @@ sub _with_current_patron_token {
     return $content;
 }
 
+my %_REVIEW_CODE_NAME = (
+    CHECKIN             => 'Check-in',
+    CHECKOUT            => 'Checkout',
+    RENEWAL             => 'Renewal',
+    HOLDDGST            => 'Hold ready for pickup',
+    PREDUEDGST          => 'Advance notice',
+    DUEDGST             => 'Items due',
+    AUTO_RENEWALS_DGST  => 'Automatic renewal',
+    ODUE                => 'Overdue',
+    ODUE2               => 'Second overdue',
+    ODUE3               => 'Third overdue',
+);
+
+my %_REVIEW_TRANSPORT_NAME = (
+    sms   => 'text message',
+    phone => 'phone call',
+    email => 'email',
+);
+
+my %_REVIEW_LANG_NAME = (
+    default => 'default language',
+    en      => 'English',
+    eng     => 'English',
+    'es-ES' => 'Spanish',
+    es      => 'Spanish',
+    spa     => 'Spanish',
+    'fr-CA' => 'French',
+    fr      => 'French',
+    fre     => 'French',
+);
+
+# "CHECKIN/sms/default/DEFAULT" -> "Check-in, text message, default language, all libraries"
+sub review_label_text {
+    my ($label) = @_;
+    my ( $code, $transport, $lang, $branch ) = _parse_review_label($label);
+    my $base = $code;
+    $base =~ s/-CI\z//;
+    my $name = $_REVIEW_CODE_NAME{$base} || $base;
+    my $how  = $_REVIEW_TRANSPORT_NAME{$transport} || ( $transport || 'notice' );
+    my $language = $_REVIEW_LANG_NAME{$lang} || ( $lang || 'default language' );
+    my $where = ( !defined $branch || $branch eq '' || $branch eq 'DEFAULT' )
+      ? 'all libraries'
+      : "library $branch";
+    return "$name, $how, $language, $where";
+}
+
+sub _parse_review_label {
+    my ($label) = @_;
+    $label = '' unless defined $label;
+    my ( $code, $transport, $lang, $branch ) = split m{/}, $label, 4;
+    $code      = '' unless defined $code;
+    $transport = '' unless defined $transport;
+    $lang      = 'default' unless defined $lang && $lang ne '';
+    $branch    = 'DEFAULT' unless defined $branch && $branch ne '';
+    return ( $code, $transport, $lang, $branch );
+}
+
+sub _html_escape {
+    my ($s) = @_;
+    $s = '' unless defined $s;
+    $s =~ s/&/&amp;/g;
+    $s =~ s/</&lt;/g;
+    $s =~ s/>/&gt;/g;
+    $s =~ s/"/&quot;/g;
+    return $s;
+}
+
+sub _quoted_message {
+    my ($content) = @_;
+    return '' unless defined $content && length $content;
+    if ( $content =~ /(?:^|\n)[ \t]*(?:text|script|body):[ \t]*"((?:\\.|[^"\\])*)"/s ) {
+        return _yaml_unescape_double($1);
+    }
+    if ( $content =~ /(?:^|\n)[ \t]*(?:text|script|body):[ \t]*'((?:\\.|[^'\\])*)'/s ) {
+        my $s = $1;
+        $s =~ s/\\'/'/g;
+        $s =~ s/\\\\/\\/g;
+        return $s;
+    }
+    return '';
+}
+
+sub _recommended_for {
+    my ( $code, $transport, $lang ) = @_;
+    $code = '' unless defined $code;
+    $code =~ s/-CI\z//;
+    $transport = '' unless defined $transport;
+    my $content_lang = $DEFAULT_LANG_ALIASES{ $lang // '' } || 'en';
+    for my $tpl ( values %TEMPLATES ) {
+        next unless ( $tpl->{code} // '' ) eq $code;
+        next unless ( $tpl->{transport} // '' ) eq $transport;
+        my $body = $tpl->{content}{$content_lang};
+        my $used = $content_lang;
+        if ( !defined $body || $body !~ /\S/ ) {
+            $body = $tpl->{content}{en};
+            $used = 'en';
+        }
+        return ( $body, $used, $tpl->{module} );
+    }
+    return;
+}
+
+sub _review_changes {
+    my ( $current, $recommended, $code ) = @_;
+    my @out;
+    my $base = $code // '';
+    $base =~ s/-CI\z//;
+    my $cur_msg = _quoted_message($current);
+    my $rec_msg = _quoted_message($recommended);
+    my ( $list_key, $id_path ) = _incremental_list_for_code($base);
+
+    if ( !defined $current || $current !~ /\S/ ) {
+        push @out, 'This notice has no text in Koha. Paste the recommended notice into Notices and slips.';
+        return @out;
+    }
+
+    if ( $current !~ /CirriusImpact\s*:\s*yes/i ) {
+        push @out, 'This notice is not set up for CirriusImpact, so the message text is left out of the export. Paste the recommended notice, or add the line CirriusImpact: yes at the top.';
+    }
+
+    if ( $current =~ /\[%\s*borrowernumber\s*%\]/ && $current !~ /borrower\.borrowernumber/ ) {
+        push @out, 'The patron line uses [% borrowernumber %]. Koha leaves that blank. Change it to [% borrower.borrowernumber %].';
+    }
+
+    if ( $current =~ /^[ \t]*patron:\s*(?:sms|call|email|whatsapp):/m ) {
+        push @out, 'The patron line is joined to the next line. Put the patron number on its own line, then start the message on the following line.';
+    }
+
+    if ($list_key) {
+        my $item_word = $base eq 'HOLDDGST' ? 'hold' : 'item';
+        if ( !length $cur_msg ) {
+            push @out, 'The message sentence could not be read. In the recommended notice the sentence is in quotes, and the item list sits outside the quotes.';
+        }
+        else {
+            if ( $cur_msg =~ /----/ ) {
+                push @out, "The dashed lines (----) are inside the message. Koha cuts the message at those dashes, so the title is dropped. Move the dashes outside the quotes. Only the item id belongs between them: [% $id_path %].";
+            }
+            if ( $cur_msg =~ /\[%\s*biblio\.title\s*%\]/ ) {
+                push @out, "The message uses [% biblio.title %], which is a single title. Put {{ ci.titles }} in the sentence so every $item_word is named.";
+            }
+            if ( $cur_msg !~ /\{\{\s*ci\.titles/ ) {
+                push @out, 'The message does not include {{ ci.titles }}, so the titles are not filled in. Add {{ ci.titles }} where the titles should appear.';
+            }
+            if ( ( $base eq 'CHECKOUT' || $base eq 'RENEWAL' ) && $cur_msg =~ /date_due/ && $cur_msg !~ /\{\{\s*ci\.due/ ) {
+                push @out, 'The due date comes from the checkout record and includes the time (for example 23:59:00). Use {{ ci.due }} where the date should appear. That follows the library date format and leaves the time off.';
+            }
+            elsif ( ( $base eq 'CHECKOUT' || $base eq 'RENEWAL' ) && $cur_msg !~ /\{\{\s*ci\.due/ ) {
+                push @out, 'The message does not include {{ ci.due }}. Add it where the due date should appear.';
+            }
+            if ( $current !~ /^\s*\Q$list_key\E\s*:/m ) {
+                push @out, "The notice is missing the $list_key list. That list is how each $item_word is repeated. Copy that section from the recommended notice.";
+            }
+        }
+    }
+    elsif ( $base =~ /DGST\z/ || $base =~ /^ODUE/ ) {
+        if ( $current !~ /FOREACH/ ) {
+            push @out, 'This notice has to name every item in one message. The recommended notice repeats the title for each item. Paste that notice, or add the same repeat. A single [% biblio.title %] covers only one item.';
+        }
+        if ( length $cur_msg && $cur_msg =~ /date_due/ && $cur_msg !~ /\$KohaDates/ && $cur_msg !~ /\{\{\s*ci\.due/ ) {
+            push @out, 'A due date in this message includes the time. The recommended notice uses the KohaDates filter so patrons see the date only.';
+        }
+    }
+
+    if ( length $cur_msg && length $rec_msg && $cur_msg ne $rec_msg && !@out ) {
+        push @out, 'The shape of this notice is already one CirriusImpact can send. The sentences are the library\'s own, so they were left in place. Compare the two messages below. Keep yours if a test message looks right. To use the standard wording, replace the notice with the recommended one.';
+    }
+    elsif ( !@out ) {
+        push @out, 'Compare the two notices below. Keep yours if patrons already receive the title and the date you want. Otherwise paste the recommended notice into Koha.';
+    }
+    else {
+        push @out, 'You can paste the recommended notice over this one. To keep your own sentences, leave your words in the quoted message and apply the changes above.';
+    }
+    return @out;
+}
+
+sub _letter_for_review_label {
+    my ( $dbh, $label ) = @_;
+    return unless $dbh;
+    my ( $code, $transport, $lang, $branch ) = _parse_review_label($label);
+    my $branchcode = ( $branch eq 'DEFAULT' ) ? '' : $branch;
+    my $sth = $dbh->prepare(q{
+        SELECT id, name, module, code, branchcode, lang, message_transport_type, content
+        FROM letter
+        WHERE code = ? AND message_transport_type = ? AND lang = ?
+          AND COALESCE(branchcode, '') = ?
+        LIMIT 1
+    });
+    $sth->execute( $code, $transport, $lang, $branchcode );
+    my $row = $sth->fetchrow_hashref;
+    $sth->finish();
+    return $row;
+}
+
+# HTML download: current Koha notice beside the recommended CirriusImpact notice.
+# build_review_document(labels => [...], dbh => $dbh)
+sub build_review_document {
+    my (%opts) = @_;
+    my @labels = @{ $opts{labels} || [] };
+    my $dbh = $opts{dbh};
+    if ( !$dbh ) {
+        my $ok = eval { require C4::Context; $dbh = C4::Context->dbh; 1 };
+        $dbh = undef unless $ok && $dbh;
+    }
+
+    my $html = <<"HTML";
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CirriusImpact notice comparison</title>
+<style>
+  body { font-family: Georgia, "Times New Roman", serif; max-width: 52em; margin: 2em auto; padding: 0 1em; color: #222; line-height: 1.45; }
+  h1 { font-size: 1.7em; margin-bottom: 0.2em; }
+  h2 { font-size: 1.25em; margin-top: 2em; border-top: 1px solid #ddd; padding-top: 0.8em; }
+  h3 { font-size: 1.05em; margin-bottom: 0.3em; }
+  .meta { color: #444; }
+  ol.changes li { margin: 0.45em 0; }
+  pre { border: 1px solid #ccc; padding: 0.8em 1em; white-space: pre-wrap; word-wrap: break-word; font-family: Consolas, "Courier New", monospace; font-size: 0.92em; background: #fafafa; }
+  pre.yours { border-color: #b8860b; background: #fffaf0; }
+  pre.recommended { border-color: #2e7d32; background: #f4fbf4; }
+  .steps { background: #f6f6f6; padding: 0.2em 1.2em 0.8em; }
+</style>
+</head>
+<body>
+<h1>CirriusImpact notice comparison</h1>
+<p class="meta">Plugin v$VERSION. This report lists notices the upgrade left as they are written in Koha.</p>
+<div class="steps">
+<h3>How to update a notice</h3>
+<ol>
+<li>In Koha, open <strong>Tools &rarr; Notices and slips</strong>.</li>
+<li>Find the notice by the name and code shown below.</li>
+<li>Open the <strong>SMS</strong> tab for a text message, or the <strong>Phone</strong> tab for a call.</li>
+<li>Select the same language as this report (the default language is the library fallback).</li>
+<li>Paste the recommended notice if you want the standard message, or edit your notice using the changes listed for it.</li>
+<li>Save, then send a test notice and confirm the title and the date in the CirriusImpact file.</li>
+</ol>
+<p>The yellow box on the CirriusImpact configuration page stays until the next plugin upgrade. Saving the notice in Koha does not clear that box.</p>
+</div>
+HTML
+
+    if ( !@labels ) {
+        $html .= "<p>There are no notices waiting for review.</p></body></html>\n";
+        return $html;
+    }
+
+    my $n = 0;
+    for my $label (@labels) {
+        $n++;
+        my ( $code, $transport, $lang, $branch ) = _parse_review_label($label);
+        my $friendly = review_label_text($label);
+        my ( $recommended, $used_lang, $module ) = _recommended_for( $code, $transport, $lang );
+        $recommended = '' unless defined $recommended;
+        my $row = _letter_for_review_label( $dbh, $label );
+        my $current = $row && defined $row->{content} ? $row->{content} : undef;
+        my $notice_name = ( $row && ( $row->{name} // '' ) ne '' ) ? $row->{name} : $code;
+        my $lang_note = $_REVIEW_LANG_NAME{$used_lang} || $used_lang;
+        my $cur_msg = defined $current ? _quoted_message($current) : '';
+        my $rec_msg = _quoted_message($recommended);
+        my @changes = _review_changes( $current, $recommended, $code );
+
+        $html .= '<h2>' . _html_escape("$n. $friendly") . "</h2>\n";
+        $html .= '<p class="meta">Koha notice name: <strong>' . _html_escape($notice_name) . '</strong>';
+        $html .= ' &middot; code <strong>' . _html_escape($code) . '</strong>';
+        $html .= ' &middot; ' . _html_escape( $_REVIEW_TRANSPORT_NAME{$transport} || $transport );
+        if ( $module ) {
+            $html .= ' &middot; module ' . _html_escape($module);
+        }
+        $html .= "</p>\n";
+        if ( $lang eq 'default' ) {
+            $html .= '<p>The recommended text below is the ' . _html_escape($lang_note) . " notice. Koha uses the default-language copy when a patron has no other language.</p>\n";
+        }
+
+        $html .= "<h3>What to change</h3>\n<ol class=\"changes\">\n";
+        if ( !defined $current ) {
+            $html .= "<li>The notice text could not be read from Koha for this entry. The recommended notice is still shown below.</li>\n";
+        }
+        for my $change (@changes) {
+            $html .= '<li>' . _html_escape($change) . "</li>\n";
+        }
+        $html .= "</ol>\n";
+
+        $html .= "<h3>Your message</h3>\n";
+        if ( length $cur_msg ) {
+            $html .= '<pre class="yours">' . _html_escape($cur_msg) . "</pre>\n";
+        }
+        elsif ( !defined $current ) {
+            $html .= "<p>Not loaded.</p>\n";
+        }
+        else {
+            $html .= "<p>No quoted message was found. The full notice is below.</p>\n";
+        }
+
+        $html .= "<h3>Recommended message</h3>\n";
+        if ( length $rec_msg ) {
+            $html .= '<pre class="recommended">' . _html_escape($rec_msg) . "</pre>\n";
+        }
+        elsif ( length $recommended ) {
+            $html .= "<p>The recommended notice has no single quoted sentence. Use the full notice below.</p>\n";
+        }
+        else {
+            $html .= "<p>There is no standard CirriusImpact notice for this code and transport.</p>\n";
+        }
+
+        $html .= "<h3>Your full notice in Koha</h3>\n";
+        if ( defined $current && $current =~ /\S/ ) {
+            $html .= '<pre class="yours">' . _html_escape($current) . "</pre>\n";
+            if ( $current =~ /Original Notice Template/ ) {
+                $html .= "<p>The comments at the bottom are your earlier notice. Koha does not send those comments.</p>\n";
+            }
+        }
+        else {
+            $html .= "<p>No notice text was found in Koha for this entry.</p>\n";
+        }
+
+        $html .= "<h3>Recommended full notice</h3>\n";
+        if ( length $recommended ) {
+            $html .= '<pre class="recommended">' . _html_escape($recommended) . "</pre>\n";
+            $html .= "<p>Paste this into the same tab in Notices and slips if you want the standard message.</p>\n";
+        }
+    }
+
+    $html .= "</body></html>\n";
+    return $html;
+}
+
 # Plugin upgrade: rewrite shipped CirriusImpact templates (stock codes,
 # CODE-CI and branch rows) to the current shape, including the v1.3.5–v1.3.7
 # canned text and older legacy hashes. Wrapped notices keep the library's

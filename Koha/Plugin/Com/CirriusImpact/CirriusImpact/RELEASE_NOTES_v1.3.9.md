@@ -13,7 +13,8 @@ Installing this release updates the shipped notice templates. A library that alr
 
 - CHECKOUT, CHECKIN, RENEWAL, HOLDDGST, PREDUEDGST, AUTO_RENEWALS_DGST, ODUE, ODUE2, and ODUE3 rows that are the previous canned text are rewritten to the current templates. The patron line becomes `[% borrower.borrowernumber %]`.
 - A wrapped notice keeps the library’s own wording. The patron id tag is corrected. If CHECKOUT, CHECKIN, RENEWAL, or HOLDDGST still has the `----` repeat inside the sentence, it is rebuilt from the archived original so Koha can repeat each item.
-- A notice that was edited and does not match a shipped template is not replaced. It remains on the Configure review list.
+- A notice that was edited and does not match a shipped template is not replaced. It remains on the Configure review list. **Download comparison** on that page saves an HTML file with the library's message, the recommended message, and the edits that make the title and date export.
+- CHECKIN, CHECKOUT, RENEWAL, and HOLDDGST use Koha's `----` repeat. Each event appends one item id, and the plugin fills `{{ ci.titles }}` so one message lists every item. A `FOREACH` over `checkins` does not run: Koha does not pass that list for a check-in.
 
 ## Upgrade
 
