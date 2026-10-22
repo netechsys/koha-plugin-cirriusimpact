@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.9';
+our $VERSION = '1.3.10';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -1816,6 +1816,7 @@ sub run {
     _log( \@log_lines, "Modes:$modes" );
 
     my %templates = %TEMPLATES;
+    my @incompatible;
 
 
     my $content_for_lang = sub {
@@ -1825,9 +1826,10 @@ sub run {
     };
 
     my $install_template = sub {
-        my ($name, $template, $lang, $code_override, $branchcode, $wrap_existing) = @_;
-        $branchcode     = '' unless defined $branchcode;
-        $wrap_existing  = 0  unless $wrap_existing;
+        my ($name, $template, $lang, $code_override, $branchcode, $wrap_existing, $canned_on_stock) = @_;
+        $branchcode      = '' unless defined $branchcode;
+        $wrap_existing   = 0  unless $wrap_existing;
+        $canned_on_stock = 0  unless $canned_on_stock;
 
         my $code = defined $code_override ? $code_override : $template->{code};
         my $src  = ($lang eq 'default') ? "default<-$default_content_key" : $lang;
@@ -1848,14 +1850,44 @@ sub run {
             $fetch_sth->finish();
 
             if ( defined $existing && $existing =~ /\S/ ) {
+                my $review_label = join '/', $code, $template->{transport}, $lang,
+                  ( length($branchcode) ? $branchcode : 'DEFAULT' );
+                my @problems = _notice_problems( $existing, $code );
                 if ( _already_ci_yaml($existing) ) {
+                    if (@problems) {
+                        push @incompatible, $review_label;
+                        _log(
+                            \@log_lines,
+                            "Needs review $name code=$code [$src] ($branch_label) — "
+                              . join( ' ', @problems )
+                        );
+                    }
+                    else {
+                        _log(
+                            \@log_lines,
+                            "Skipped $name code=$code [$src] ($branch_label) — already CirriusImpact YAML"
+                        );
+                    }
+                    return 0;
+                }
+                my $wrapped = _wrap_existing_as_ci( $existing, $template->{transport}, $code );
+                my @after = _notice_problems( $wrapped, $code );
+                if (@after) {
+                    push @incompatible, $review_label;
                     _log(
                         \@log_lines,
-                        "Skipped $name code=$code [$src] ($branch_label) — already CirriusImpact YAML"
+                        "Left unchanged $name code=$code [$src] ($branch_label) — "
+                          . join( ' ', ( @problems ? @problems : @after ) )
                     );
                     return 0;
                 }
-                $content = _wrap_existing_as_ci( $existing, $template->{transport}, $code );
+                $content = $wrapped;
+                if (@problems) {
+                    _log(
+                        \@log_lines,
+                        "Rebuilt repeat for $name code=$code [$src] ($branch_label) so each item is included"
+                    );
+                }
             }
             else {
                 # No SMS/phone row yet. Install the canned notice so the library
@@ -1880,13 +1912,30 @@ sub run {
         }
 
         my $check_sth = $dbh->prepare(q{
-            SELECT COUNT(*) FROM letter
+            SELECT content FROM letter
             WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
               AND branchcode = ?
+            LIMIT 1
         });
         $check_sth->execute($template->{module}, $code, $template->{transport}, $lang, $branchcode);
-        my ($exists) = $check_sth->fetchrow_array;
+        my ($existing_content) = $check_sth->fetchrow_array;
         $check_sth->finish();
+        my $exists = defined $existing_content;
+
+        if ($canned_on_stock) {
+            # Keep the library's previous text recoverable, and mark the row so
+            # Remove can tell a CI Default apart from a wrapped notice.
+            my $previous = $existing_content;
+            if ( defined $previous && $previous =~ /CirriusImpact Default/ ) {
+                $previous = _extract_original_from_wrapped($previous);
+            }
+            my $canned = $content;
+            $canned =~ s/\s+\z//;
+            $content = $canned . "\n" . '[%' . '# CirriusImpact Default %]' . "\n";
+            if ( defined $previous && $previous =~ /\S/ ) {
+                $content .= _tt_comment_block($previous) . "\n";
+            }
+        }
 
         if ($exists) {
             # Leave letter.name and letter.title alone. Koha shows one name for
@@ -1938,18 +1987,19 @@ sub run {
 
     my %want_service = map { $_ => 1 } @want_services;
     my $count = 0;
-    # Each target: [code_mode, branchcode, wrap_existing]
-    # code_mode undef = stock code; '__CI__' = CODE-CI (canned samples)
-    # wrap_existing: read existing letter text and wrap in CirriusImpact YAML
+    # Each target: [code_mode, branchcode, wrap_existing, canned_on_stock]
+    # code_mode undef = the normal letter code (CHECKOUT, CHECKIN, ...).
+    # wrap_existing: read existing letter text and wrap in CirriusImpact YAML.
+    # canned_on_stock: write the canned CI default onto that same normal notice.
     my @targets;
     if ($do_defaults) {
-        push @targets, [ undef, '', 1 ];
+        push @targets, [ undef, '', 1, 0 ];
     }
     if ($do_ci_templates) {
-        push @targets, [ '__CI__', '', 0 ];
+        push @targets, [ undef, '', 0, 1 ];
     }
     for my $b (@consortia_branches) {
-        push @targets, [ undef, $b, 1 ];
+        push @targets, [ undef, $b, 1, 0 ];
     }
 
     eval {
@@ -1959,13 +2009,9 @@ sub run {
                 my $tpl = $templates{$name};
                 next unless $want_service{ $tpl->{transport} };
                 for my $t (@targets) {
-                    my ($code_mode, $branch, $wrap_existing) = @$t;
-                    my $code_override;
-                    if (defined $code_mode && $code_mode eq '__CI__') {
-                        $code_override = $tpl->{code} . '-CI';
-                    }
+                    my ( undef, $branch, $wrap_existing, $canned_on_stock ) = @$t;
                     $count += $install_template->(
-                        $name, $tpl, $lang, $code_override, $branch, $wrap_existing
+                        $name, $tpl, $lang, undef, $branch, $wrap_existing, $canned_on_stock
                     );
                 }
             }
@@ -1982,16 +2028,24 @@ sub run {
         };
     };
 
+    my %seen_incompatible;
+    @incompatible = grep { length && !$seen_incompatible{$_}++ } @incompatible;
+    if (@incompatible) {
+        _log( \@log_lines, "Incompatible notices left for review: " . join( ', ', @incompatible ) );
+        _log( \@log_lines, "Download the comparison on Configure to see what each notice would send." );
+    }
+
     _log(\@log_lines, "=" x 50);
     _log(\@log_lines, "Installation complete! Installed/Updated $count template rows");
     _log(\@log_lines, "Notes: matching letter rows are overwritten; TranslateNotices + OPACLanguages for language tabs.");
 
     return {
-        ok    => 1,
-        count => $count,
-        log   => join( '', @log_lines ),
-        error => '',
-        modes => {
+        ok           => 1,
+        count        => $count,
+        incompatible => \@incompatible,
+        log          => join( '', @log_lines ),
+        error        => '',
+        modes        => {
             defaults           => $do_defaults,
             ci_templates       => $do_ci_templates,
             consortia_branches => \@consortia_branches,
@@ -2005,7 +2059,8 @@ sub run {
 # Reverse InstallMessageTemplates::run for the same mode selection.
 # - defaults / consortia: restore stock letter content from archived TT comments
 #   (fallback: sms.text / call.script body)
-# - ci-templates: DELETE CODE-CI rows installed as canned samples
+# - ci-templates: restore the normal notice (or delete a row this install created)
+#   and delete any older CODE-CI sample rows
 #
 # run_remove(%same_opts_as_run)
 sub run_remove {
@@ -2132,7 +2187,54 @@ sub run_remove {
             $sth->finish();
         }
 
-        # 2) Remove canned CODE-CI sample rows
+        # 2) CI Defaults were written onto the normal letter code. Restore the
+        #    archived notice, or delete the row when this install created it.
+        if ($do_ci_templates) {
+            my $sth = $dbh->prepare(q{
+                SELECT module, code, message_transport_type, lang, branchcode, content
+                FROM letter
+                WHERE branchcode = ''
+                  AND content LIKE '%CirriusImpact Default%'
+            });
+            $sth->execute();
+            while ( my $row = $sth->fetchrow_hashref ) {
+                my $code      = $row->{code} // '';
+                my $transport = $row->{message_transport_type} // '';
+                my $lang      = $row->{lang} // '';
+                next if $code =~ /-CI\z/;
+                next unless $want_service{$transport};
+                next unless $want_lang{$lang};
+                my $original = _extract_original_from_wrapped( $row->{content} );
+                if ( defined $original && $original =~ /\S/ ) {
+                    my $upd = $dbh->prepare(q{
+                        UPDATE letter
+                        SET content = ?
+                        WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                          AND branchcode = ?
+                    });
+                    $upd->execute(
+                        $original, $row->{module}, $code, $transport, $lang, ''
+                    );
+                    $upd->finish();
+                    $count++;
+                    _log( \@log_lines, "Reverted CI default $code/$transport [$lang] (branch=DEFAULT)" );
+                }
+                else {
+                    my $del = $dbh->prepare(q{
+                        DELETE FROM letter
+                        WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                          AND branchcode = ?
+                    });
+                    $del->execute( $row->{module}, $code, $transport, $lang, '' );
+                    $del->finish();
+                    $count++;
+                    _log( \@log_lines, "Deleted CI default $code/$transport [$lang] (branch=DEFAULT)" );
+                }
+            }
+            $sth->finish();
+        }
+
+        # 3) Remove older canned CODE-CI sample rows from previous installs
         if ($do_ci_templates) {
             my $sth = $dbh->prepare(q{
                 SELECT module, code, message_transport_type, lang, branchcode, content
@@ -2423,6 +2525,144 @@ sub _recommended_for {
     return;
 }
 
+sub _fill_sample_tags {
+    my ( $s, $one_title, $all_titles ) = @_;
+    $s = '' unless defined $s;
+    $one_title = 'The stolen queen' unless defined $one_title;
+    $all_titles = 'The stolen queen; Kite Day' unless defined $all_titles;
+    $s =~ s/\[%\s*branch\.branchcode\s*%\]/MAIN/g;
+    $s =~ s/\[%\s*branch\.branchname\s*%\]/Your library/g;
+    $s =~ s/\[%\s*borrower\.firstname\s*%\]/Patron/g;
+    $s =~ s/\[%\s*borrower\.borrowernumber\s*%\]/13542/g;
+    $s =~ s/\[%\s*biblio\.title\s*%\]/$one_title/g;
+    $s =~ s/\{\{\s*ci\.titles_comma\s*\}\}/The stolen queen, Kite Day/g;
+    $s =~ s/\{\{\s*ci\.titles\s*\}\}/$all_titles/g;
+    $s =~ s/\{\{\s*ci\.due\s*\}\}/10\/30\/2026/g;
+    $s =~ s/\{\{\s*ci\.count\s*\}\}/2/g;
+    $s =~ s/\[%\s*[^\]]+\|\s*\$KohaDates[^%]*%\]/10\/30\/2026/g;
+    $s =~ s/\[%\s*[^\]]*date_due[^\]]*%\]/2026-10-30 23:59:00/g;
+    $s =~ s/[ \t]+/ /g;
+    $s =~ s/\A\s+|\s+\z//g;
+    return $s;
+}
+
+# What a two-item event would put in the exported message.
+# Returns (sentence, note). Sample items are The stolen queen and Kite Day.
+sub _preview_send {
+    my ( $content, $code, $transport ) = @_;
+    my $base = $code // '';
+    $base =~ s/-CI\z//;
+    my $msg = _quoted_message($content);
+    $msg = $content unless length $msg;
+    $msg = '' unless defined $msg;
+    my $phone = ( $transport // '' ) eq 'phone';
+    my $both = $phone ? 'The stolen queen, Kite Day' : 'The stolen queen; Kite Day';
+    my ( $list_key ) = _incremental_list_for_code($base);
+
+    if ( $msg =~ /^(.*)\[%\s*IF\s+[^\]]*checkins\b.*?\[%\s*ELSE\s*%\](.*?)\[%\s*END\s*%\](.*)\z/s ) {
+        my $sentence = _fill_sample_tags( $1 . $2 . $3, 'The stolen queen', 'The stolen queen' );
+        return (
+            $sentence,
+            'Two items were returned: The stolen queen and Kite Day. This notice sends only The stolen queen. Koha does not provide a checkins list, so the multiple-item branch is skipped, and the second item is not added to the waiting message.'
+        );
+    }
+
+    my $quoted = _quoted_message($content);
+    if ( length $quoted && $quoted =~ /----/ ) {
+        return (
+            '',
+            'The dashed lines sit inside the message, so Koha cuts the sentence apart. The stolen queen and Kite Day are not sent as one message.'
+        );
+    }
+
+    if ( $msg =~ /\{\{\s*ci\.titles/ ) {
+        return (
+            _fill_sample_tags( $msg, 'The stolen queen', $both ),
+            'Both titles are in this one message.'
+        );
+    }
+
+    if ( $msg =~ /\[%\s*FOREACH\s+\w+\s+IN\s+(?!checkins\b)(\w+)\s*%\](.*?)\[%\s*END\s*%\]/s ) {
+        my $inner = $2;
+        my @bits;
+        for my $title ( 'The stolen queen', 'Kite Day' ) {
+            my $bit = $inner;
+            $bit =~ s/\[%\s*UNLESS\s+loop\.last\s*%\](.*?)\[%\s*END\s*%\]/; /sg;
+            $bit =~ s/\[%\s*IF\s+loop\.last\s*%\](.*?)\[%\s*END\s*%\]//sg;
+            $bit =~ s/\[%\s*[\w.]+\.title[^%]*%\]/$title/g;
+            $bit =~ s/\[%\s*[\w.]+\.biblio\.title[^%]*%\]/$title/g;
+            $bit =~ s/\[%\s*[\w.]*date_due[^%]*%\]/10\/30\/2026/g;
+            push @bits, $bit;
+        }
+        my $looped = join( '', @bits );
+        $msg =~ s/\[%\s*FOREACH\s+\w+\s+IN\s+\w+\s*%\].*?\[%\s*END\s*%\]/$looped/s;
+        return (
+            _fill_sample_tags( $msg, 'The stolen queen', $both ),
+            'Both titles are in this one message.'
+        );
+    }
+
+    if ( $list_key || $msg =~ /\[%\s*biblio\.title\s*%\]/ ) {
+        my $sentence = _fill_sample_tags( $msg, 'The stolen queen', 'The stolen queen' );
+        my $verb = $base eq 'CHECKIN' ? 'returned' : ( $base eq 'HOLDDGST' ? 'ready' : 'included' );
+        return (
+            $sentence,
+            "Two items were $verb: The stolen queen and Kite Day. This notice sends only The stolen queen. A second item is not added to the waiting message."
+        );
+    }
+
+    return (
+        _fill_sample_tags( $msg, 'The stolen queen', $both ),
+        'Compare this sentence with the recommended notice.'
+    );
+}
+
+sub _notice_problems {
+    my ( $content, $code ) = @_;
+    return () unless defined $content && $content =~ /\S/;
+    my $base = $code // '';
+    $base =~ s/-CI\z//;
+    my $msg = _quoted_message($content);
+    my $look = length $msg ? $msg : $content;
+    my @problems;
+    my ($list_key) = _incremental_list_for_code($base);
+
+    if ( $content =~ /\[%\s*borrowernumber\s*%\]/ && $content !~ /borrower\.borrowernumber/ ) {
+        push @problems, 'The patron line uses [% borrowernumber %]. Koha leaves that blank. Use [% borrower.borrowernumber %].';
+    }
+    if ($list_key) {
+        if ( $look =~ /\bcheckins\b/ ) {
+            push @problems, 'This notice loops over checkins. Koha does not provide that list for a check-in, so only one title is sent.';
+        }
+        if ( length $msg && $msg =~ /----/ ) {
+            push @problems, 'The dashed lines (----) are inside the message. Koha cuts the message at those dashes, so the title is dropped.';
+        }
+        my $has_titles = $look =~ /\{\{\s*ci\.titles/;
+        my $delim_outside = length $msg
+          ? ( $content =~ /----/ && $msg !~ /----/ )
+          : ( $content =~ /----/ );
+        if ( !$has_titles && !$delim_outside && $look !~ /\bcheckins\b/ ) {
+            push @problems, 'This notice does not collect every item into one message. Koha handles it one item at a time, and a second item is not added while the message is waiting.';
+        }
+        if ( ( $base eq 'CHECKOUT' || $base eq 'RENEWAL' )
+            && $look =~ /date_due/
+            && $look !~ /\{\{\s*ci\.due/
+            && $look !~ /\$KohaDates/ )
+        {
+            push @problems, 'The due date includes the time (for example 23:59:00). Use {{ ci.due }} for the date only.';
+        }
+    }
+    elsif ( $base =~ /DGST\z/ || $base =~ /^ODUE/ ) {
+        if ( $content !~ /FOREACH/ && $look !~ /FOREACH/ ) {
+            push @problems, 'This notice has to name every item in one message. A single title tag covers only one item.';
+        }
+        if ( $look =~ /date_due/ && $look !~ /\$KohaDates/ && $look !~ /\{\{\s*ci\.due/ ) {
+            push @problems, 'A due date in this message includes the time. Use the KohaDates filter so patrons see the date only.';
+        }
+    }
+    return @problems;
+}
+
 sub _review_changes {
     my ( $current, $recommended, $code ) = @_;
     my @out;
@@ -2449,8 +2689,11 @@ sub _review_changes {
         push @out, 'The patron line is joined to the next line. Put the patron number on its own line, then start the message on the following line.';
     }
 
-    if ($list_key) {
+        if ($list_key) {
         my $item_word = $base eq 'HOLDDGST' ? 'hold' : 'item';
+        if ( $cur_msg =~ /\bcheckins\b/ || ( $current // '' ) =~ /\bcheckins\b/ ) {
+            push @out, 'This notice loops over checkins. Koha does not provide that list on a check-in, so only one title is sent. Use {{ ci.titles }} and the item list in the recommended notice.';
+        }
         if ( !length $cur_msg ) {
             push @out, 'The message sentence could not be read. In the recommended notice the sentence is in quotes, and the item list sits outside the quotes.';
         }
@@ -2601,6 +2844,24 @@ HTML
             $html .= '<li>' . _html_escape($change) . "</li>\n";
         }
         $html .= "</ol>\n";
+
+        my ( $sent_now, $sent_now_note ) = _preview_send( $current, $code, $transport );
+        my ( $sent_rec, $sent_rec_note ) = _preview_send( $recommended, $code, $transport );
+        $html .= "<h3>What this notice would send</h3>\n";
+        $html .= "<p>Example with two items, The stolen queen and Kite Day, at library MAIN.</p>\n";
+        if ( length $sent_now ) {
+            $html .= '<pre class="yours">' . _html_escape($sent_now) . "</pre>\n";
+        }
+        if ( length $sent_now_note ) {
+            $html .= '<p>' . _html_escape($sent_now_note) . "</p>\n";
+        }
+        $html .= "<h3>What the recommended notice would send</h3>\n";
+        if ( length $sent_rec ) {
+            $html .= '<pre class="recommended">' . _html_escape($sent_rec) . "</pre>\n";
+        }
+        if ( length $sent_rec_note ) {
+            $html .= '<p>' . _html_escape($sent_rec_note) . "</p>\n";
+        }
 
         $html .= "<h3>Your message</h3>\n";
         if ( length $cur_msg ) {

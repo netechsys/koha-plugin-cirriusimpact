@@ -92,7 +92,7 @@ sudo koha-shell INSTANCE -c \
 | Mode | What it does | When to use |
 |------|----------------|-------------|
 | `--defaults` (default) | **Wrap** existing stock letters at `branchcode=''` in CirriusImpact YAML (keeps your wording) | Single-library / system-default notices |
-| `--ci-templates` | Install **canned** samples as `CODE-CI` only; stock codes unchanged | Optional samples / alternate codes only |
+| `--ci-templates` | Install **canned** CI Defaults on the normal letter (SMS and phone of `CHECKOUT`, `CHECKIN`, and the rest). Keeps that notice's name. Does not create `CODE-CI` | Replace the normal SMS/phone notice with the CI default |
 | `--consortia-branch=CPL[,UPL…]` | **Wrap** existing letters for those Koha `branchcode`s | Consortia; Koha prefers branch templates |
 | `--consortia-from-plugin` | Same wrap for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
 
@@ -123,7 +123,7 @@ Undo a prior install with the same mode / services / languages / branches:
 | Mode | Remove behavior |
 |------|-----------------|
 | Defaults / Consortia | Restore archived original notice text from the TT comment block (fallback: YAML `text` / `script` body) |
-| CI templates | **Delete** matching canned `CODE-CI` letter rows |
+| CI templates | Restore the archived notice on the normal letter, or delete the SMS/phone row when this install created it. Also delete older `CODE-CI` sample rows |
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -155,7 +155,7 @@ sudo koha-shell INSTANCE -c \
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install (or with `--remove`, revert) mode | `--defaults` if none given |
-| `--remove` | Revert wrapped notices / delete `CODE-CI` samples for the selected mode | off |
+| `--remove` | Revert wrapped notices, restore or delete CI Defaults, and delete older `CODE-CI` samples for the selected mode | off |
 | `--upgrade` / `--dry-run` | Rewrite untouched canned CirriusImpact notices to the current multi-item shape (preview with `--dry-run`) | off |
 | `--services=sms,phone` | Which transports to process (`sms` and/or `phone`) | both |
 | `--default-language=…` | Language content for Koha's Default tab (canned CI templates) | `en` |
@@ -191,7 +191,7 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --no-restart'
 ```
 
-**CODE-CI only** (leave stock letters alone):
+**CI Defaults on the normal notices:**
 
 ```bash
 sudo koha-shell INSTANCE -c \

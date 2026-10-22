@@ -254,10 +254,13 @@
         notice (<code>letter</code> row) and wrap its current text in CirriusImpact YAML
         so the plugin can export it — they do <em>not</em> replace your wording with
         canned CI sample text. Matching rows are <strong>overwritten</strong> with the
-        wrapped form. Notices that already contain <code>CirriusImpact: yes</code> are skipped. A transport with no notice yet gets the canned template, so a library can start SMS without an existing SMS letter. CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are rebuilt so the <code>----</code> repeat stays outside the sentence.
-        <strong>CI templates</strong> still install canned sample notices as <code>CODE-CI</code>
-        only (stock codes unchanged). Save Branch services first if you use
-        <em>consortia from plugin</em>. No Koha restart is required from this screen.
+        wrapped form. Notices that already contain <code>CirriusImpact: yes</code> are skipped when that wording can list every item. If it cannot (for example a check-in that loops over <code>checkins</code>, which Koha does not provide), the notice is left unchanged and listed above. Download comparison shows the message that notice would send, and the message the recommended notice would send. A transport with no notice yet gets the canned template, so a library can start SMS without an existing SMS letter. CHECKOUT, CHECKIN, RENEWAL and HOLDDGST are rebuilt so the <code>----</code> repeat stays outside the sentence.
+        <strong>CI templates</strong> install those canned notices on the normal letter
+        (the SMS and phone tabs of <code>CHECKOUT</code>, <code>CHECKIN</code>, and the rest).
+        They use the same name as that notice, so they show up in the normal notice
+        instead of as a separate <code>CODE-CI</code> letter.
+        Save Branch services first if you use <em>consortia from plugin</em>.
+        No Koha restart is required from this screen.
       </p>
       [% IF install_templates_log %]
       <pre style="max-height: 16em; overflow: auto; background: #f7f7f7; border: 1px solid #ccc; padding: 0.75em; white-space: pre-wrap;">[% install_templates_log | html %]</pre>
@@ -279,7 +282,7 @@
           <div class="radio">
             <label>
               <input type="radio" name="install_mode" value="ci-templates">
-              CI templates — install canned sample notices as <code>CODE-CI</code> only (does not change stock)
+              CI templates — install canned notices on the normal letter (SMS and phone), not as a separate <code>CODE-CI</code> notice
             </label>
           </div>
           <div class="radio">
@@ -361,9 +364,10 @@
       <p class="hint">
         <strong>Remove / revert</strong> undoes an install for the same mode selection above:
         Defaults and Consortia restore the archived original notice text (from the hidden
-        <code>[%# Original Notice Template %]</code> block). CI templates deletes the
-        canned <code>CODE-CI</code> sample rows. Use the same Services / Languages / branch
-        filters as install.
+        <code>[%# Original Notice Template %]</code> block). CI templates restores the
+        previous text on the normal notice, or deletes the SMS/phone row when that
+        install created it, and deletes any older <code>CODE-CI</code> sample rows.
+        Use the same Services / Languages / branch filters as install.
       </p>
       <form method="get" style="margin-bottom: 0.5em;" id="ci-remove-templates-form"
             onsubmit="return confirm('Remove/revert CirriusImpact notice templates now? This cannot be undone without a backup.');">

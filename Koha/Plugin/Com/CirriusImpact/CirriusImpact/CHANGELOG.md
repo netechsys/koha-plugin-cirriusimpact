@@ -1,3 +1,11 @@
+## 1.3.10 - 2026-10-22
+
+### Notice install writes CI Defaults onto the normal letter
+- **CHANGED:** CI templates mode installs the canned CirriusImpact notices on the normal letter (the SMS and phone tabs of CHECKOUT, CHECKIN, and the rest) and keeps that notice's name. It no longer creates a separate `CODE-CI` letter.
+- **ADDED:** The previous notice text is archived, so Remove / revert restores it. A row this install created is deleted. Older `CODE-CI` sample rows are still deleted.
+- **ADDED:** Defaults and Consortia install leave a notice unchanged when its wording cannot list every item, and the comparison download shows the sentence that notice would send beside the sentence the recommended notice would send.
+- **DOCS:** RELEASE_NOTES_v1.3.10.
+
 ## 1.3.9 - 2026-10-15
 
 ### Notice upgrade no longer flags shipped templates

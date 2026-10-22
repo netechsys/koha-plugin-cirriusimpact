@@ -5,7 +5,7 @@
 | Mode | Writes | Typical use |
 |------|--------|-------------|
 | `--defaults` | Stock `CODE` at `branchcode=''` | Single library (default if no mode given) |
-| `--ci-templates` | `CODE-CI` only; stock untouched | Alternate letter codes for CI members |
+| `--ci-templates` | Canned CI Defaults on the normal `CODE` (SMS and phone). No new `CODE-CI` letter | Put the CI default on the notice Koha already sends |
 | `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped rows | Consortia |
 | `--consortia-from-plugin` | Same for Configure → Branch services (enabled branches) | Consortia after matrix Save |
 

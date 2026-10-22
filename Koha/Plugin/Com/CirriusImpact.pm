@@ -53,7 +53,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.9";
+our $VERSION = "1.3.10";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -235,6 +235,20 @@ sub configure {
     $self->output_html($template->output());
 }
 
+sub _ci_merge_template_review_labels {
+    my ( $self, @labels ) = @_;
+    my %seen;
+    my @all = grep { length && !$seen{$_}++ } (
+        split( /,/, $self->retrieve_data('template_upgrade_customized') // '' ),
+        @labels,
+    );
+    $self->store_data({
+        template_upgrade_version    => $VERSION,
+        template_upgrade_customized => join( ',', @all ),
+    });
+    return;
+}
+
 sub _ci_template_upgrade_review_rows {
     my ($self) = @_;
     my @labels = grep { length } split /,/, ( $self->retrieve_data('template_upgrade_customized') // '' );
@@ -350,6 +364,12 @@ sub _ci_configure_install_templates {
     }
     if ( $result->{ok} ) {
         my $msg = "Installed/updated $result->{count} notice template row(s).";
+        my @flagged = @{ $result->{incompatible} || [] };
+        if (@flagged) {
+            $self->_ci_merge_template_review_labels(@flagged);
+            $msg .= ' ' . scalar(@flagged)
+              . ' notice(s) were left unchanged because their wording will not include every item. Download the comparison on this page to see what would be sent.';
+        }
         return ( 1, $msg, $result->{log} // '' );
     }
     return ( 0, ( $result->{error} || 'Template install failed.' ), $result->{log} // '' );

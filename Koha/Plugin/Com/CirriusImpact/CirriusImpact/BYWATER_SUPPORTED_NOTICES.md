@@ -1,7 +1,7 @@
 # CirriusImpact Koha Plugin — Supported Notice Types
 
-**Document date:** October 15, 2026  
-**Plugin release:** CirriusImpact **v1.3.9**  
+**Document date:** October 22, 2026  
+**Plugin release:** CirriusImpact **v1.3.10**  
 **Releases:** https://github.com/netechsys/koha-plugin-cirriusimpact/releases  
 **Integration:** SMS (`commType=T`) and voice (`commType=V`) via CSV export + SFTP; Koha status lifecycle (`pending` → `transmitted` → `sent` / `failed` / `pending`)
 
@@ -182,18 +182,18 @@ Please confirm:
 
 ---
 
-## Reference files (v1.3.9)
+## Reference files (v1.3.10)
 
 | File | Role |
 |------|------|
 | `notification_mapping.yml` | Koha letter code → CirriusImpact type/level |
 | `CirriusImpact.pm` → `before_send_messages` | Notice selection and CSV export |
 | `NOTIFICATION_TYPES.md` | In-plugin documentation of mappings |
-| `RELEASE_NOTES_v1.3.9.md` | Current production release notes |
+| `RELEASE_NOTES_v1.3.10.md` | Current production release notes |
 | `RELEASE_NOTES_v1.3.6.md` | Notice dates |
 | `RELEASE_NOTES_v1.3.5.md` | Multi-item notices |
 | `TEMPLATE_I18N.md` | Template shapes (incremental vs all-at-once) and installer |
 
 ---
 
-**Install package:** `koha-plugin-cirriusimpact-v1.3.9.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
+**Install package:** `koha-plugin-cirriusimpact-v1.3.10.kpz` from [GitHub releases](https://github.com/netechsys/koha-plugin-cirriusimpact/releases)
