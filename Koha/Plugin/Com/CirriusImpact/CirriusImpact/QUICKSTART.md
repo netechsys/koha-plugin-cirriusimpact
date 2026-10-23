@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.10**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.11**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.10.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.11.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -462,16 +462,16 @@ call:
 
 #### AUTO_RENEWALS_DGST (Auto-renewal Digest) Notice Examples
 
-Koha renders AUTO_RENEWALS_DGST **all at once** (`automatic_renewals.pl`) with every renewal attempt as `checkouts`; `auto_renew_error` is set when an item could not be renewed.
+Koha renders AUTO_RENEWALS_DGST **all at once** (`automatic_renewals.pl`). `auto_renew_error` is set when an item could not be renewed. The notice lists only the items that renewed.
 
 **SMS Transport:**
 ```yaml
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 sms:
-  text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
+  text: "[% sep = '' %][% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %]; [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Call [% branch.branchphone %]."
 ---
 ```
 
@@ -480,9 +480,9 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
+  script: "[% sep = '' %]Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %], [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Call [% branch.branchphone %]."
 ---
 ```
 

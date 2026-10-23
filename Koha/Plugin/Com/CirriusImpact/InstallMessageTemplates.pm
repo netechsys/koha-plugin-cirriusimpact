@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.10';
+our $VERSION = '1.3.11';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -1463,27 +1463,27 @@ call:
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 sms:
-  text: "[% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Call [% branch.branchphone %]."
+  text: "[% sep = '' %][% branch.branchcode %]: Auto-renewal: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %]; [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 sms:
-  text: "[% branch.branchcode %]: Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Llame [% branch.branchphone %]."
+  text: "[% sep = '' %][% branch.branchcode %]: Renovacion automatica: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %]; [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Llame [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 sms:
-  text: "[% branch.branchcode %]: Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %]; [% END %][% END %]. Appelez [% branch.branchphone %]."
+  text: "[% sep = '' %][% branch.branchcode %]: Renouvellement automatique: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %]; [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Appelez [% branch.branchphone %]."
 ---
 },
         },
@@ -1497,27 +1497,27 @@ sms:
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 call:
-  script: "Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (not renewed)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Call [% branch.branchphone %]."
+  script: "[% sep = '' %]Hello [% borrower.firstname %]. This is [% branch.branchname %]. Auto-renewal update: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %], [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Call [% branch.branchphone %]."
 ---
 },
         'es-ES' => q{
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 call:
-  script: "Hola [% borrower.firstname %]. [% branch.branchname %]. Renovacion automatica: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (no renovado)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Llame al [% branch.branchphone %]."
+  script: "[% sep = '' %]Hola [% borrower.firstname %]. [% branch.branchname %]. Renovacion automatica: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %], [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Llame al [% branch.branchphone %]."
 ---
 },
         'fr-CA' => q{
 ---
 CirriusImpact: yes
 patron: [% borrower.borrowernumber %]
-checkouts: "[% FOREACH c IN checkouts %][% c.issue_id %],[% END %]"
+checkouts: "[% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF idsep %],[% END %][% c.issue_id %][% idsep = 1 %][% END %][% END %]"
 call:
-  script: "Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement automatique: [% FOREACH c IN checkouts %][% c.item.biblio.title | remove('[ /:;,.]+$') %][% IF c.auto_renew_error %] (non renouvele)[% ELSE %] ([% c.date_due | $KohaDates %])[% END %][% UNLESS loop.last %], [% END %][% END %]. Appelez le [% branch.branchphone %]."
+  script: "[% sep = '' %]Bonjour [% borrower.firstname %]. [% branch.branchname %]. Renouvellement automatique: [% FOREACH c IN checkouts %][% IF !c.auto_renew_error %][% IF sep %], [% END %][% c.item.biblio.title | remove('[ /:;,.]+$') %] ([% c.date_due | $KohaDates %])[% sep = 1 %][% END %][% END %]. Appelez le [% branch.branchphone %]."
 ---
 },
         },
@@ -2310,6 +2310,19 @@ my %LEGACY_TEMPLATE_DIGESTS = (
         'b3ac36791ded6542aa6da34982e97af871875709' => 'phone:es-ES',
         'e4fc64364ec5181d69745a8da6ede6a7c2e16b03' => 'sms:en',
         'ee8a196fde3b146d15aaabc54fd26145aebcc053' => 'sms:es-ES',
+        # v1.3.5–v1.3.10 digest text listed items that were not renewed
+        '324a23a25c5c8eb6e22bc2abb0935e90c9cb5391' => 'sms:en',
+        '6b07a3217c75942229012a93acf771070666c940' => 'sms:en',
+        '391fed3df5f72a000340a1fd9f008e116b1316ee' => 'sms:es-ES',
+        '1e9e2ef266a6e8bc4c4deb702cbdd596a3d5b4e3' => 'sms:es-ES',
+        '2e6539c47532193fbfc626e058990b41c99c6150' => 'sms:fr-CA',
+        'a6c5a7cd1f5de64fbaead9128e8e87e370ad969a' => 'sms:fr-CA',
+        '02fc1cb8694392913964590ee3e3aff7b435069c' => 'phone:en',
+        '49cee08fb1e21d3d568e3814c91373fafbd1d6b2' => 'phone:en',
+        '43cf4196bd1ba744b7102276f0417a4afecd8f3b' => 'phone:es-ES',
+        'b448382bd553b00b8684457e5f72c04ac01e5762' => 'phone:es-ES',
+        'b7d30add5e89611d2d8da535c4defe23b525291c' => 'phone:fr-CA',
+        '7e525b51778f59075a79eff524858fb7d39da68e' => 'phone:fr-CA',
     },
     CHECKIN => {
         '22c133b5f7634fefdddc2509dd82e8a7bb104e35' => 'sms:fr-CA',

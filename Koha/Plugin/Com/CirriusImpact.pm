@@ -53,7 +53,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.10";
+our $VERSION = "1.3.11";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {

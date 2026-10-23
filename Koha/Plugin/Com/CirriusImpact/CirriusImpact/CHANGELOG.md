@@ -1,3 +1,10 @@
+## 1.3.11 - 2026-10-23
+
+### Auto-renewal digest lists only renewed items
+- **CHANGED:** AUTO_RENEWALS_DGST SMS and phone notices (English, Spanish, and French) skip checkouts with `auto_renew_error`. The message and the exported item list include only items that were renewed.
+- **UNCHANGED:** A library that edited this notice keeps its wording and is listed for review. The shipped digest is rewritten on upgrade.
+- **DOCS:** RELEASE_NOTES_v1.3.11.
+
 ## 1.3.10 - 2026-10-22
 
 ### Notice install writes CI Defaults onto the normal letter
