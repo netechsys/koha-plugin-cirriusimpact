@@ -1,0 +1,127 @@
+{
+  "/message/{message_id}/status": {
+    "post": {
+      "x-mojo-to": "Com::CirriusImpact::API#update_message_status",
+      "operationId": "updateCirriusImpactMessageStatus",
+      "tags": ["messages"],
+      "produces": ["application/json"],
+      "parameters": [
+        {
+          "name": "message_id",
+          "in": "path",
+          "description": "Koha notice message id (message_queue.message_id)",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "status",
+          "in": "query",
+          "description": "New delivery status. Must be one of 'sent', 'inprogress', or 'failed'. Use 'inprogress' (not 'pending') when the notice file has been received and delivery is underway.",
+          "required": true,
+          "type": "string",
+          "enum": ["sent", "inprogress", "failed"]
+        },
+        {
+          "name": "failure_code",
+          "in": "query",
+          "description": "Optional failure code / reason. Only honored when status='failed'.",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "subject",
+          "in": "query",
+          "description": "Optional updated subject (typically only for email notices).",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "in": "query",
+          "description": "Optional updated message content.",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "responses": {
+        "204": { "description": "Message status updated" },
+        "400": {
+          "description": "Invalid input",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        },
+        "404": {
+          "description": "Message not found",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        },
+        "500": {
+          "description": "Server error",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        }
+      }
+    }
+  },
+  "/message/{message_id}/content": {
+    "post": {
+      "x-mojo-to": "Com::CirriusImpact::API#update_message_content",
+      "operationId": "updateCirriusImpactMessageContent",
+      "tags": ["messages"],
+      "produces": ["application/json"],
+      "parameters": [
+        {
+          "name": "message_id",
+          "in": "path",
+          "description": "Koha notice message id (message_queue.message_id)",
+          "required": true,
+          "type": "integer"
+        },
+        {
+          "name": "subject",
+          "in": "query",
+          "description": "Optional updated subject",
+          "required": false,
+          "type": "string"
+        },
+        {
+          "name": "content",
+          "in": "query",
+          "description": "Updated message content",
+          "required": true,
+          "type": "string"
+        }
+      ],
+      "responses": {
+        "204": { "description": "Message content updated" },
+        "400": {
+          "description": "Invalid input",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        },
+        "404": {
+          "description": "Message not found",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        },
+        "500": {
+          "description": "Server error",
+          "schema": {
+            "type": "object",
+            "properties": { "error": { "type": "string" } }
+          }
+        }
+      }
+    }
+  }
+}

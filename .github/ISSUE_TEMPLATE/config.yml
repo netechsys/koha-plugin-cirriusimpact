@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: CirriusImpact support (libraries under contract)
+    url: https://www.cirriusimpact.com
+    about: Production support for hosted CirriusImpact SMS/Voice customers
+  - name: Documentation
+    url: https://github.com/netechsys/koha-plugin-cirriusimpact/blob/main/Koha/Plugin/Com/CirriusImpact/CirriusImpact/QUICKSTART.md
+    about: Install, configuration, and notice templates
