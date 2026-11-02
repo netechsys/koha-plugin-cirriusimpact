@@ -1,3 +1,10 @@
+## 1.3.12 - 2026-11-02
+
+### CI templates is the default notice install
+- **CHANGED:** Configure → Install notice templates selects **CI templates** by default. That mode writes the canned CirriusImpact notices onto the normal SMS and phone letters.
+- **CHANGED:** The wrap-existing mode is labeled **Library Existing**. It keeps the library's current notice wording and wraps it for export.
+- **DOCS:** RELEASE_NOTES_v1.3.12.
+
 ## 1.3.11 - 2026-10-23
 
 ### Auto-renewal digest lists only renewed items

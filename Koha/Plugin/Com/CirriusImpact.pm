@@ -53,7 +53,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.11";
+our $VERSION = "1.3.12";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -301,8 +301,8 @@ sub _ci_configure_install_templates {
         return ( 0, 'Confirm the overwrite checkbox before installing templates.', '' );
     }
 
-    my $mode = scalar $cgi->param('install_mode') // 'defaults';
-    $mode = 'defaults' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
+    my $mode = scalar $cgi->param('install_mode') // 'ci-templates';
+    $mode = 'ci-templates' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
 
     my @services;
     push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
@@ -383,8 +383,8 @@ sub _ci_configure_remove_templates {
         return ( 0, 'Confirm the remove/revert checkbox before continuing.', '' );
     }
 
-    my $mode = scalar $cgi->param('install_mode') // 'defaults';
-    $mode = 'defaults' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
+    my $mode = scalar $cgi->param('install_mode') // 'ci-templates';
+    $mode = 'ci-templates' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
 
     my @services;
     push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
