@@ -1,0 +1,124 @@
+# CirriusImpact Notification Type and Level Mapping
+# This file defines how Koha message codes map to Notification Type and Level
+# 
+# Format:
+# message_code:
+#   type: <number>    # Notification Type (1-6)
+#   level: <number>   # Notification Level (1-6)
+#   description: <text> # Optional description
+
+# Type 1: Overdue Notices
+ODUE:
+  type: 1
+  level: 1
+  description: "First overdue notice"
+
+ODUE2:
+  type: 1
+  level: 2
+  description: "Second overdue notice"
+
+ODUE3:
+  type: 1
+  level: 3
+  description: "Third overdue notice"
+
+DUE:
+  type: 1
+  level: 4
+  description: "Overdue notice (DUE letter code in overduerules)"
+
+DUEDGST:
+  type: 1
+  level: 4
+  description: "Overdue digest (if configured)"
+
+# Type 2: Hold Notices
+HOLD:
+  type: 2
+  level: 1
+  description: "Item ready for pickup"
+
+HOLDDGST:
+  type: 2
+  level: 1
+  description: "Item ready for pickup (digest)"
+
+HOLD_CHANGED:
+  type: 2
+  level: 2
+  description: "Hold status changed"
+
+HOLD_REMINDER:
+  type: 2
+  level: 3
+  description: "Hold reminder"
+
+HOLDPLACED:
+  type: 2
+  level: 4
+  description: "Hold placed confirmation"
+
+HOLDPLACED_PATRON:
+  type: 2
+  level: 5
+  description: "Hold placed confirmation (patron)"
+
+HOLD_SLIP:
+  type: 2
+  level: 6
+  description: "Hold slip (email)"
+
+# Type 3: Circulation Notices
+CHECKOUT:
+  type: 3
+  level: 1
+  description: "Item checked out"
+
+CHECKIN:
+  type: 3
+  level: 2
+  description: "Item checked in"
+
+# Type 4: Pre-due Notices
+PREDUE:
+  type: 4
+  level: 1
+  description: "Pre-due reminder"
+
+PREDUEDGST:
+  type: 4
+  level: 1
+  description: "Pre-due reminder (digest)"
+
+# Type 5: Renewal Notices
+RENEWAL:
+  type: 5
+  level: 1
+  description: "Manual renewal confirmation"
+
+AUTO_RENEWALS:
+  type: 5
+  level: 2
+  description: "Auto-renewal notification"
+
+AUTO_RENEWALS_DGST:
+  type: 5
+  level: 2
+  description: "Auto-renewal notification (digest)"
+
+# Type 6: Membership Notices
+MEMBERSHIP_EXPIRY:
+  type: 6
+  level: 1
+  description: "Membership expiring"
+
+MEMBERSHIP_RENEWED:
+  type: 6
+  level: 2
+  description: "Membership renewed"
+
+WELCOME:
+  type: 6
+  level: 3
+  description: "Welcome message"

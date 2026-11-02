@@ -1,0 +1,71 @@
+name: Bug report
+description: CSV export, Koha notice, or plugin behavior problem
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Include Koha version, plugin version, and a sample notice if possible.
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: CirriusImpact plugin version
+      placeholder: "e.g. 1.2.2"
+    validations:
+      required: true
+
+  - type: input
+    id: koha_version
+    attributes:
+      label: Koha version
+      placeholder: "e.g. 24.11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: notice_type
+    attributes:
+      label: Notice type (if applicable)
+      options:
+        - HOLD
+        - PREDUE
+        - PREDUEDGST
+        - DUE
+        - ODUE
+        - CHECKOUT
+        - CHECKIN
+        - Other
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: csv_sample
+    attributes:
+      label: CSV row or messageText sample (redact patron phone/barcode)
+      description: Paste one anonymized CSV line or the messageText field
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log excerpt
+      description: Koha plugin log or CirriusImpact log lines if available
+    validations:
+      required: false

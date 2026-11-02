@@ -1,0 +1,216 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>CirriusImpact - Configuration</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head><body>
+[% INCLUDE 'header.inc' %]
+<div id="breadcrumbs">
+  <a href="/cgi-bin/koha/mainpage.pl">Home</a> &rsaquo;
+  <a href="/cgi-bin/koha/plugins/plugins-home.pl">Plugins</a> &rsaquo;
+  CirriusImpact &rsaquo; Configuration
+</div>
+
+<div class="main container">
+  <form method="get">
+    <input type="hidden" name="class" value="[% CLASS %]"/>
+    <input type="hidden" name="method" value="[% METHOD %]"/>
+    <input type="hidden" name="save" value="1"/>
+
+    <fieldset>
+      <legend>Connection</legend>
+      <div class="form-group"><label>Host</label><input type="text" name="host" value="[% host %]" class="form-control"/></div>
+      <div class="form-group"><label>Username</label><input type="text" name="username" value="[% username %]" class="form-control"/></div>
+      <div class="form-group"><label>Password</label><input type="password" name="password" value="[% password %]" class="form-control"/></div>
+      <div class="form-group"><label>Archive dir</label><input type="text" name="archive_dir" value="[% archive_dir %]" class="form-control"/></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Features</legend>
+      <div class="checkbox">
+        <label><input type="checkbox" name="enable_phone" value="1" [% IF enable_phone %]checked="checked"[% END %]> Enable Phone</label>
+      </div>
+      <div class="checkbox">
+        <label><input type="checkbox" name="enable_sms" value="1" [% IF enable_sms %]checked="checked"[% END %]> Enable SMS</label>
+      </div>
+      <div class="checkbox">
+        <label><input type="checkbox" name="enable_email" value="1" [% IF enable_email %]checked="checked"[% END %]> Enable Email</label>
+      </div>
+      <div class="checkbox">
+        <label><input type="checkbox" name="enable_whatsapp" value="1" [% IF enable_whatsapp %]checked="checked"[% END %]> Enable WhatsApp</label>
+      </div>
+      <div class="checkbox">
+      </div>
+
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="skip_odue_if_other_if_sms_or_email" value="1" [% IF skip_odue_if_other_if_sms_or_email %]checked="checked"[% END %]>
+          Skip calling ODUE if patron has SMS or Email
+        </label>
+      </div>
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="include_messagetext" value="1" [% IF include_messagetext %]checked="checked"[% END %]>
+          Include messageText column in CSV output
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>JSON Section Order</legend>
+      <input type="text" name="section_order" value="[% section_order %]" class="form-control"/>
+      <p class="hint">
+        Comma-separated sections. Available: <code>message_type</code>, <code>patron</code>, <code>items</code>, <code>call</code>, <code>sms</code>, <code>message</code>
+      </p>
+    </fieldset>
+
+    <button type="submit" class="btn btn-primary">Save</button>
+  </form>
+</div>
+
+<script>
+function copyPre(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  var text = el.innerText;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(e) {}
+    document.body.removeChild(ta);
+  }
+}
+</script>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<hr>
+<h3>Updated Examples</h3>
+<p>Use the sample YAML below. Only the block matching the message <em>transport</em> is exported (<code>call</code> for phone, <code>sms</code> for SMS, <code>email</code> for Email, <code>whatsapp</code> for WhatsApp).</p>
+<pre><code>
+Phone (Call) notice — sample YAML:
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+call:
+    to: "&lt;&lt;borrowers.phone&gt;&gt;,&lt;&lt;borrowers.smsalertnumber&gt;&gt;"
+    reference: "&lt;&lt;message.message_id&gt;&gt;"
+    script: "Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;. This is &lt;&lt;branches.branchname&gt;&gt;. You have holds ready for pickup:  &lt;&lt;biblio.title&gt;&gt;. Please pickup them up at &lt;&lt;branches.branchname&gt;&gt;. For questions, call &lt;&lt;branches.branchphone&gt;&gt;."
+    msgid: "&lt;&lt;reserves.reserve_id&gt;&gt;"
+    commType: 
+    language: "&lt;&lt;borrowers.lang&gt;&gt;"
+    notificationType: "&lt;&lt;message_type.transport&gt;&gt;"
+    notificationLevel: 
+    patronBarCode: "&lt;&lt;borrowers.cardnumber&gt;&gt;"
+    STAB_userSaluation: "&lt;&lt;borrowers.title&gt;&gt;"
+    patronFirstName: "&lt;&lt;borrowers.firstname&gt;&gt;"
+    patronLastName: "&lt;&lt;borrowers.surname&gt;&gt;"
+    phone: "&lt;&lt;borrowers.phone&gt;&gt;"
+    email: "&lt;&lt;borrowers.email&gt;&gt;"
+    branch: "&lt;&lt;branches.branchcode&gt;&gt;"
+    branchname: "&lt;&lt;branches.branchname&gt;&gt;"
+    itemsID: "&lt;&lt;reserves.biblionumber&gt;&gt;"
+    date: "&lt;&lt;reserves.waitingdate&gt;&gt;"
+    title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+    DeliveryOptionID: 
+    LanguageID: 
+    NotificationTypeID: 
+    ReportingOrgID: 
+    PatronID: "&lt;&lt;borrowers.borrowernumber&gt;&gt;"
+    ItemRecordID: 
+    RequestID: "&lt;&lt;reserves.reserve_id&gt;&gt;"
+    PickupAreaDescription: "&lt;&lt;branches.pickup_location&gt;&gt;"
+    TxnID: 
+    AccountBalance: 
+
+SMS notice — sample YAML:
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+sms:
+  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  commType:
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  notificationLevel:
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  email: &lt;&lt;borrowers.email&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  DeliveryOptionID:
+  LanguageID:
+  NotificationTypeID:
+  ReportingOrgID:
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  ItemRecordID:
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+  PickupAreaDescription: "&quot;&lt;&lt;branches.pickup_location&gt;&gt;&quot;"
+  TxnID:
+  AccountBalance:
+
+Email notice — sample YAML (extrapolated):
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+email:
+  to: &lt;&lt;borrowers.email&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  subject: "&lt;&lt;message.subject&gt;&gt;"
+  html: "&lt;p&gt;Hello &lt;&lt;borrowers.preferredname&gt;&gt;&lt;&lt;borrowers.firstname&gt;&gt;,&lt;/p&gt;&lt;p&gt;You have holds ready for pickup: &lt;strong&gt;&lt;&lt;biblio.title&gt;&gt;&lt;/strong&gt; at &lt;strong&gt;&lt;&lt;branches.branchname&gt;&gt;&lt;/strong&gt;.&lt;/p&gt;&lt;p&gt;Questions? Call &lt;&lt;branches.branchphone&gt;&gt;.&lt;/p&gt;"
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  branchphone: &lt;&lt;branches.branchphone&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+
+WhatsApp notice — sample YAML (extrapolated):
+--------------------------------------------------
+CirriusImpact: yes
+items: &lt;&lt;biblio.title&gt;&gt;
+notification_reference: &lt;&lt;reserves.reserve_id&gt;&gt;
+whatsapp:
+  to: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  reference: &lt;&lt;message.message_id&gt;&gt;
+  text: "[&lt;&lt;branches.branchname&gt;&gt;] &lt;&lt;borrowers.firstname&gt;&gt;, your holds are ready at &lt;&lt;branches.branchname&gt;&gt; : &lt;&lt;biblio.title&gt;&gt;  Questions? Call &lt;&lt;branches.branchphone&gt;&gt;."
+  msgid: &lt;&lt;reserves.reserve_id&gt;&gt;
+  language: &lt;&lt;borrowers.lang&gt;&gt;
+  notificationType: &lt;&lt;message_type.transport&gt;&gt;
+  patronBarCode: &lt;&lt;borrowers.cardnumber&gt;&gt;
+  STAB_userSaluation: &lt;&lt;borrowers.title&gt;&gt;
+  patronFirstName: &lt;&lt;borrowers.firstname&gt;&gt;
+  patronLastName: &lt;&lt;borrowers.surname&gt;&gt;
+  phone: &lt;&lt;borrowers.smsalertnumber&gt;&gt;
+  email: &lt;&lt;borrowers.email&gt;&gt;
+  branch: &lt;&lt;branches.branchcode&gt;&gt;
+  branchname: &lt;&lt;branches.branchname&gt;&gt;
+  itemsID: "&quot;&lt;&lt;reserves.biblionumber&gt;&gt;&quot;"
+  date: "&quot;&lt;&lt;reserves.waitingdate&gt;&gt;&quot;"
+  title: "[% IF biblio.title %][% biblio.title %][% ELSIF sms.text.match('ready:') %][% SET _t = sms.text.replace('^.*ready:\\s*','').replace('\\s+at\\s+.*$','') %][% _t %][% ELSE %][% '' %][% END %]"
+  PatronID: &lt;&lt;borrowers.borrowernumber&gt;&gt;
+  RequestID: "&quot;&lt;&lt;reserves.reserve_id&gt;&gt;&quot;"
+</code></pre>
