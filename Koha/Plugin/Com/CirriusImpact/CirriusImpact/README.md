@@ -1,6 +1,6 @@
 # CirriusImpact Koha Plugin
 
-Version: **1.3.12**
+Version: **1.3.13**
 
 Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export over SFTP).
 
@@ -12,7 +12,8 @@ Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export 
 - [NOTIFICATION_TYPES.md](NOTIFICATION_TYPES.md) — supported notice types
 - [BYWATER_SUPPORTED_NOTICES.md](BYWATER_SUPPORTED_NOTICES.md) — ByWater-oriented notice list
 - [CHANGELOG.md](CHANGELOG.md) — history
-- [RELEASE_NOTES_v1.3.12.md](RELEASE_NOTES_v1.3.12.md) — current production release notes
+- [RELEASE_NOTES_v1.3.13.md](RELEASE_NOTES_v1.3.13.md) — consortia CI templates or Library Existing
+- [RELEASE_NOTES_v1.3.12.md](RELEASE_NOTES_v1.3.12.md) — CI templates selected by default
 - [RELEASE_NOTES_v1.3.11.md](RELEASE_NOTES_v1.3.11.md) — auto-renewal digest lists only renewed items
 - [RELEASE_NOTES_v1.3.10.md](RELEASE_NOTES_v1.3.10.md) — CI Defaults install on the normal notice
 - [RELEASE_NOTES_v1.3.9.md](RELEASE_NOTES_v1.3.9.md) — notice upgrade and comparison download
@@ -28,7 +29,7 @@ Integrates Koha with CirriusImpact for SMS and voice patron notices (CSV export 
 - Configure: **Claim** install token, Connection (SFTP), **Branch services** matrix (SMS / CIXL / Outbound), Type 1 & Type 2 consortia
 - Features: skip ODUE voice when SMS/email exists; include `messageText` in CSV
 - REST callbacks for notice status (`sent` / `inprogress` / `failed`)
-- CLI template installer (`install_message_templates.pl`) and **Configure → Install notice templates** — Defaults/Consortia **wrap** existing letter text; **Remove / revert** restores; `--ci-templates` installs canned CI Defaults on the normal notice's SMS and phone tabs
+- CLI template installer (`install_message_templates.pl`) and **Configure → Install notice templates** — choose CI templates or Library Existing, then system default or consortia branches. Remove / revert uses the same choices. `--consortia-content=ci-templates` writes the canned notices on consortia branches.
 
 ## Support
 

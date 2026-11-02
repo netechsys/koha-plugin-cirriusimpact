@@ -4,7 +4,7 @@
 
 **International Support:** This plugin works with phone numbers in any format - US (+1), UK (+44), Australia (+61), or regional formats. The SMS::Send driver accepts international and local number formats.
 
-Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.12**.
+Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases) (or from CirriusImpact directly). Current stable: **v1.3.13**.
 
 ## Installation (10 minutes)
 
@@ -12,7 +12,7 @@ Download the latest released KPZ from [GitLab Releases](https://smsgit2.cgsis.co
 
 1. Download `koha-plugin-cirriusimpact-v{VERSION}.kpz` from [GitLab Releases](https://smsgit2.cgsis.com/tcr/koha-plugin-cirriusimpact/-/releases)
 2. Go to **More > Administration > Plugins > Upload Plugin**
-3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.12.kpz`)
+3. Select the KPZ file (e.g. `koha-plugin-cirriusimpact-v1.3.13.kpz`)
 4. Click **Upload** and wait for installation to complete
 
 **Note:** The SMS::Send drivers are **automatically included** in the KPZ and extracted during installation — **no manual installation required.**
@@ -104,7 +104,7 @@ Click **Save**.
 
 ### Step 5: Install Message Templates (Recommended)
 
-**Option A — from Configure (no SSH):** After saving Branch services, open **Configure → Install notice templates**, choose a mode (**CI templates** is selected), confirm, click **Install templates**. Choose **Library Existing** to wrap the library's current wording instead. To undo later, use **Remove / revert templates** with the same mode. Results appear on the same page.
+**Option A — from Configure (no SSH):** After saving Branch services, open **Configure → Install notice templates**. **CI templates** and **System default** are selected. Choose **Library Existing** to wrap current wording. Choose a **Consortia** destination to write that same choice onto branch letters. To undo later, use **Remove / revert templates** with the same choices. Results appear on the same page.
 
 **Option B — CLI** (`koha-shell`), same options as the UI:
 
@@ -113,14 +113,17 @@ sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --no-restart'
 ```
 
-#### Install modes (pick one)
+#### Install modes
+
+Pick **what** to write and **where** it goes. Configure shows these as two choices. On the command line, `--ci-templates` is canned text at system default, and a consortia flag is wrap unless you add `--consortia-content=ci-templates`.
 
 | Mode | What it does | When to use |
 |------|----------------|-------------|
-| `--defaults` | **Wrap** existing stock letters at `branchcode=''` in CirriusImpact YAML (keeps your wording) | Single library (default if no mode given) |
-| `--ci-templates` | Install **canned** CI Defaults on the normal letter's SMS and phone tabs. Does not create `CODE-CI` | Replace the normal SMS/phone notice with the CI default |
-| `--consortia-branch=CPL[,UPL…]` | **Wrap** existing letters for those Koha branchcodes | Consortia; explicit Koha branchcodes |
-| `--consortia-from-plugin` | Same wrap for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
+| `--defaults` | **Wrap** existing letters at `branchcode=''` | Single library (default if no mode given) |
+| `--ci-templates` | **Canned** CI templates on the normal letter at `branchcode=''` | Replace the system-default SMS/phone notice with the CI default |
+| `--consortia-branch=CPL[,UPL…]` | Same letter code on those Koha branchcodes. Wraps unless `--consortia-content=ci-templates` | Consortia; explicit Koha branchcodes |
+| `--consortia-from-plugin` | Same for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
+| `--consortia-content=ci-templates` | With either consortia flag, write the canned CI templates on those branches instead of wrapping | Consortia that should use the CI default wording |
 
 **Important:** `--consortia-branch=CPL` updates `CHECKOUT` with `branchcode=CPL`, **not** `CHECKOUT-CPL`. Use Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
 
@@ -211,6 +214,7 @@ sudo koha-shell INSTANCE -c \
 | `--ci-templates` | flag | off |
 | `--consortia-branch` | Koha branchcode(s), repeatable / comma-separated | none |
 | `--consortia-from-plugin` | flag | off |
+| `--consortia-content` | `existing` (wrap) or `ci-templates` (canned), with a consortia mode | `existing` |
 | `--remove` | restore wrapped originals, restore or delete CI Defaults, and delete older `CODE-CI` rows | off |
 | `--upgrade` | rewrite untouched canned CirriusImpact notices to the current multi-item shape (add `--dry-run` to preview) | off |
 | `--services` | `sms`, `phone` (comma-separated) | `sms,phone` |

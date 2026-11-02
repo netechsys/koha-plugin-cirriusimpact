@@ -87,14 +87,17 @@ sudo koha-shell INSTANCE -c \
   'perl /var/lib/koha/INSTANCE/plugins/Koha/Plugin/Com/CirriusImpact/CirriusImpact/install_message_templates.pl --defaults --no-restart'
 ```
 
-#### Install modes (pick one)
+#### Install modes
+
+Pick **what** to write and **where** it goes.
 
 | Mode | What it does | When to use |
 |------|----------------|-------------|
 | `--defaults` (default) | **Wrap** existing stock letters at `branchcode=''` in CirriusImpact YAML (keeps your wording) | Single-library / system-default notices |
-| `--ci-templates` | Install **canned** CI Defaults on the normal letter (SMS and phone of `CHECKOUT`, `CHECKIN`, and the rest). Keeps that notice's name. Does not create `CODE-CI` | Replace the normal SMS/phone notice with the CI default |
-| `--consortia-branch=CPL[,UPL…]` | **Wrap** existing letters for those Koha `branchcode`s | Consortia; Koha prefers branch templates |
+| `--ci-templates` | Install **canned** CI templates on the normal letter at `branchcode=''` (SMS and phone of `CHECKOUT`, `CHECKIN`, and the rest). Keeps that notice's name. Does not create `CODE-CI` | Replace the system-default SMS/phone notice with the CI default |
+| `--consortia-branch=CPL[,UPL…]` | Same letter code for those Koha `branchcode`s. **Wraps** the text already there | Consortia; Koha prefers branch templates |
 | `--consortia-from-plugin` | Same wrap for every branch with a service enabled in Configure → **Branch services** | Consortia after the matrix is saved |
+| `--consortia-content=ci-templates` | With either consortia flag, write the **canned** CI templates on those branches instead of wrapping | Consortia that should use the CI default wording |
 
 **Important:** `--consortia-branch=CPL` updates `CHECKOUT` with `branchcode=CPL`, **not** letter codes named `CHECKOUT-CPL`. Values are Koha branchcodes (`CPL`, `UPL`), not CirriusImpact library IDs (`KDEMO_CPL`).
 
@@ -122,8 +125,8 @@ Undo a prior install with the same mode / services / languages / branches:
 
 | Mode | Remove behavior |
 |------|-----------------|
-| Defaults / Consortia | Restore archived original notice text from the TT comment block (fallback: YAML `text` / `script` body) |
-| CI templates | Restore the archived notice on the normal letter, or delete the SMS/phone row when this install created it. Also delete older `CODE-CI` sample rows |
+| Library Existing (system default or consortia) | Restore archived original notice text from the TT comment block |
+| CI templates (system default or consortia) | Restore the archived notice, or delete the SMS/phone row when this install created it. System default also deletes older `CODE-CI` sample rows |
 
 ```bash
 sudo koha-shell INSTANCE -c \
@@ -154,7 +157,7 @@ sudo koha-shell INSTANCE -c \
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Install (or with `--remove`, revert) mode | `--defaults` if none given |
+| `--defaults` / `--ci-templates` / `--consortia-branch` / `--consortia-from-plugin` | Where and what to install (or, with `--remove`, revert). Add `--consortia-content=ci-templates` to put canned notices on consortia branches | `--defaults` if none given |
 | `--remove` | Revert wrapped notices, restore or delete CI Defaults, and delete older `CODE-CI` samples for the selected mode | off |
 | `--upgrade` / `--dry-run` | Rewrite untouched canned CirriusImpact notices to the current multi-item shape (preview with `--dry-run`) | off |
 | `--services=sms,phone` | Which transports to process (`sms` and/or `phone`) | both |
@@ -191,7 +194,14 @@ sudo koha-shell INSTANCE -c \
   'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --no-restart'
 ```
 
-**CI Defaults on the normal notices:**
+**CI templates on consortia branches** (canned notices for CPL and UPL):
+
+```bash
+sudo koha-shell INSTANCE -c \
+  'perl .../install_message_templates.pl --consortia-branch=CPL,UPL --consortia-content=ci-templates --no-restart'
+```
+
+**CI templates at system default:**
 
 ```bash
 sudo koha-shell INSTANCE -c \

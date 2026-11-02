@@ -1,3 +1,11 @@
+## 1.3.13 - 2026-11-02
+
+### Consortia can install CI templates or Library Existing
+- **CHANGED:** Configure → Install notice templates asks two questions: what to write (CI templates or Library Existing) and where (system default, branches enabled in Branch services, or named Koha branchcodes). Consortia is no longer wrap-only.
+- **CHANGED:** Remove / revert uses the same two choices. A canned install on a branch restores the archived notice, or deletes the row when that install created it.
+- **ADDED:** CLI `--consortia-content=ci-templates` writes the canned notices on the consortia branches. Omit it and those branches still wrap the existing text.
+- **DOCS:** RELEASE_NOTES_v1.3.13.
+
 ## 1.3.12 - 2026-11-02
 
 ### CI templates is the default notice install

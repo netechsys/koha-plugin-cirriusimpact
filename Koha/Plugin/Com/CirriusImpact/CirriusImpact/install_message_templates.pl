@@ -26,6 +26,7 @@ my $services_opt;
 my $do_defaults = 0;
 my $do_ci_templates = 0;
 my $do_from_plugin = 0;
+my $consortia_content = 'existing';
 my $do_remove = 0;
 my $do_upgrade = 0;
 my $dry_run = 0;
@@ -41,6 +42,7 @@ GetOptions(
     'ci-templates!'            => \$do_ci_templates,
     'consortia-branch=s'       => \@consortia_branch_opts,
     'consortia-from-plugin!'   => \$do_from_plugin,
+    'consortia-content=s'      => \$consortia_content,
     'remove!'                  => \$do_remove,
     'upgrade!'                 => \$do_upgrade,
     'dry-run!'                 => \$dry_run,
@@ -48,7 +50,8 @@ GetOptions(
 ) or die <<"EOF";
 Usage: $0 [install mode...] [options]
   --defaults / --ci-templates / --consortia-branch=CODE / --consortia-from-plugin
-  --remove  (revert wrapped notices / delete CODE-CI samples for selected modes)
+  --consortia-content=existing|ci-templates   (with a consortia mode; default existing)
+  --remove  (revert wrapped notices / restore or delete CI templates for the same selection)
   --upgrade [--dry-run]  (rewrite untouched canned CirriusImpact notices to the current multi-item shape)
   --services=sms,phone --default-language=en --languages=default,en,es-ES,fr-CA --no-restart
 EOF
@@ -57,6 +60,9 @@ my @branches;
 for my $raw (@consortia_branch_opts) {
     push @branches, split /,/, $raw;
 }
+$consortia_content = 'existing'
+  unless $consortia_content =~ /^(existing|wrap|ci-templates|canned)\z/;
+my $consortia_canned = ( $consortia_content eq 'ci-templates' || $consortia_content eq 'canned' ) ? 1 : 0;
 
 my $plugin;
 if ($do_from_plugin) {
@@ -75,6 +81,7 @@ my %run = (
     ci_templates          => $do_ci_templates,
     consortia_branches    => \@branches,
     consortia_from_plugin => $do_from_plugin,
+    consortia_canned      => $consortia_canned,
     services              => $services_opt,
     languages             => $lang_opt,
     default_language      => $default_language_opt,

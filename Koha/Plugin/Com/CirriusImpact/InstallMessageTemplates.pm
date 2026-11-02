@@ -6,7 +6,7 @@ package Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
 use strict;
 use warnings;
 
-our $VERSION = '1.3.12';
+our $VERSION = '1.3.13';
 
 my %DEFAULT_LANG_ALIASES = (
     default => 'en',
@@ -282,11 +282,115 @@ sub _plugin_enabled_branches {
     return @codes;
 }
 
+# Shared by run() and run_remove().
+# Returns (defaults, ci_templates, branches_arrayref, consortia_canned, error).
+# ci_templates writes canned notices at branchcode ''.
+# consortia_canned writes those same canned notices on the consortia branches.
+# Without consortia_canned, consortia branches wrap the text already stored there.
+sub _prepare_install_scope {
+    my ( $opts, $dbh, $log_lines, $verb ) = @_;
+    $verb = 'install' unless defined $verb && length $verb;
+
+    my $do_defaults      = $opts->{defaults} ? 1 : 0;
+    my $do_ci_templates  = $opts->{ci_templates} ? 1 : 0;
+    my $consortia_canned = $opts->{consortia_canned} ? 1 : 0;
+
+    my @consortia_branches;
+    if ( ref $opts->{consortia_branches} eq 'ARRAY' ) {
+        @consortia_branches = @{ $opts->{consortia_branches} };
+    }
+    elsif ( defined $opts->{consortia_branches} && length $opts->{consortia_branches} ) {
+        @consortia_branches = split /,/, $opts->{consortia_branches};
+    }
+    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
+    @consortia_branches = grep { length } @consortia_branches;
+
+    if ( $opts->{consortia_from_plugin} ) {
+        my @from_plugin = _plugin_enabled_branches( $opts->{plugin}, $dbh, $log_lines );
+        if (@from_plugin) {
+            _log( $log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
+            push @consortia_branches, @from_plugin;
+        }
+        else {
+            return (
+                0, 0, [], 0,
+                'No branches have a service enabled in Branch services. Save that matrix first, or choose specific Koha branchcodes.'
+            );
+        }
+    }
+
+    {
+        my %seen;
+        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
+    }
+
+    if ( $consortia_canned && !@consortia_branches ) {
+        return ( 0, 0, [], 0, 'CI templates for consortia needs at least one Koha branchcode.' );
+    }
+
+    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
+        $do_defaults = 1;
+        _log( $log_lines, "No $verb mode given; assuming Library Existing at system default." );
+    }
+
+    return ( $do_defaults, $do_ci_templates, \@consortia_branches, $consortia_canned, '' );
+}
+
+# Restore a canned CI default on one branchcode, or delete the row when this
+# install created it and there is no archived notice to put back.
+sub _revert_canned_branch {
+    my ( $dbh, $branch, $want_service, $want_lang, $log_lines ) = @_;
+    my $count = 0;
+    my $branch_label = length($branch) ? "branch=$branch" : "branch=DEFAULT";
+    my $sth = $dbh->prepare(q{
+        SELECT module, code, message_transport_type, lang, content
+        FROM letter
+        WHERE branchcode = ?
+          AND content LIKE '%CirriusImpact Default%'
+    });
+    $sth->execute($branch);
+    while ( my $row = $sth->fetchrow_hashref ) {
+        my $code      = $row->{code} // '';
+        my $transport = $row->{message_transport_type} // '';
+        my $lang      = $row->{lang} // '';
+        next if $code =~ /-CI\z/;
+        next unless $want_service->{$transport};
+        next unless $want_lang->{$lang};
+        my $original = _extract_original_from_wrapped( $row->{content} );
+        if ( defined $original && $original =~ /\S/ ) {
+            my $upd = $dbh->prepare(q{
+                UPDATE letter
+                SET content = ?
+                WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                  AND branchcode = ?
+            });
+            $upd->execute( $original, $row->{module}, $code, $transport, $lang, $branch );
+            $upd->finish();
+            $count++;
+            _log( $log_lines, "Reverted CI default $code/$transport [$lang] ($branch_label)" );
+        }
+        else {
+            my $del = $dbh->prepare(q{
+                DELETE FROM letter
+                WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
+                  AND branchcode = ?
+            });
+            $del->execute( $row->{module}, $code, $transport, $lang, $branch );
+            $del->finish();
+            $count++;
+            _log( $log_lines, "Deleted CI default $code/$transport [$lang] ($branch_label)" );
+        }
+    }
+    $sth->finish();
+    return $count;
+}
+
 # run(
 #   defaults => 1,
 #   ci_templates => 0,
 #   consortia_branches => ['CPL'],
 #   consortia_from_plugin => 0,
+#   consortia_canned => 0,   # canned CI templates on those branches; otherwise wrap
 #   services => ['sms','phone'],
 #   languages => ['default','en','es-ES','fr-CA'],
 #   default_language => 'en',
@@ -1761,18 +1865,6 @@ sub run {
         return { ok => 0, count => 0, log => '', error => $err };
     };
 
-    my $do_defaults     = $opts{defaults} ? 1 : 0;
-    my $do_ci_templates = $opts{ci_templates} ? 1 : 0;
-    my @consortia_branches;
-    if ( ref $opts{consortia_branches} eq 'ARRAY' ) {
-        @consortia_branches = @{ $opts{consortia_branches} };
-    }
-    elsif ( defined $opts{consortia_branches} && length $opts{consortia_branches} ) {
-        @consortia_branches = split /,/, $opts{consortia_branches};
-    }
-    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
-    @consortia_branches = grep { length } @consortia_branches;
-
     my $dbh = $opts{dbh};
     unless ($dbh) {
         eval {
@@ -1784,25 +1876,11 @@ sub run {
         };
     }
 
-    if ( $opts{consortia_from_plugin} ) {
-        my @from_plugin = _plugin_enabled_branches( $opts{plugin}, $dbh, \@log_lines );
-        if (@from_plugin) {
-            _log( \@log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
-            push @consortia_branches, @from_plugin;
-        }
-        else {
-            _log( \@log_lines, "consortia_from_plugin: no concrete branches in enabled_branches (unset/*/empty)." );
-        }
-    }
-
-    {
-        my %seen;
-        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
-    }
-
-    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
-        $do_defaults = 1;
-        _log( \@log_lines, "No install mode given; assuming defaults." );
+    my ( $do_defaults, $do_ci_templates, $branch_ref, $consortia_canned, $scope_error )
+      = _prepare_install_scope( \%opts, $dbh, \@log_lines, 'install' );
+    my @consortia_branches = @{ $branch_ref || [] };
+    if ($scope_error) {
+        return { ok => 0, count => 0, log => join( '', @log_lines ), error => $scope_error };
     }
 
     _log( \@log_lines, "CirriusImpact Message Template Installer" );
@@ -1813,6 +1891,8 @@ sub run {
     $modes .= " defaults" if $do_defaults;
     $modes .= " ci-templates" if $do_ci_templates;
     $modes .= " consortia-branch=" . join( ',', @consortia_branches ) if @consortia_branches;
+    $modes .= $consortia_canned ? " consortia-content=ci-templates" : " consortia-content=existing"
+      if @consortia_branches;
     _log( \@log_lines, "Modes:$modes" );
 
     my %templates = %TEMPLATES;
@@ -1999,7 +2079,12 @@ sub run {
         push @targets, [ undef, '', 0, 1 ];
     }
     for my $b (@consortia_branches) {
-        push @targets, [ undef, $b, 1, 0 ];
+        if ($consortia_canned) {
+            push @targets, [ undef, $b, 0, 1 ];
+        }
+        else {
+            push @targets, [ undef, $b, 1, 0 ];
+        }
     }
 
     eval {
@@ -2049,6 +2134,7 @@ sub run {
             defaults           => $do_defaults,
             ci_templates       => $do_ci_templates,
             consortia_branches => \@consortia_branches,
+            consortia_canned   => $consortia_canned,
             services           => \@want_services,
             languages          => \@want_langs,
             default_language   => $default_content_key,
@@ -2056,11 +2142,10 @@ sub run {
     };
 }
 
-# Reverse InstallMessageTemplates::run for the same mode selection.
-# - defaults / consortia: restore stock letter content from archived TT comments
-#   (fallback: sms.text / call.script body)
-# - ci-templates: restore the normal notice (or delete a row this install created)
-#   and delete any older CODE-CI sample rows
+# Reverse InstallMessageTemplates::run for the same selection.
+# - Library Existing: restore the archived original on system default or the branch
+# - CI templates: restore the archived notice, or delete the row when this install
+#   created it. On system default, also delete older CODE-CI sample rows.
 #
 # run_remove(%same_opts_as_run)
 sub run_remove {
@@ -2079,18 +2164,6 @@ sub run_remove {
         return { ok => 0, count => 0, log => '', error => $err };
     };
 
-    my $do_defaults     = $opts{defaults} ? 1 : 0;
-    my $do_ci_templates = $opts{ci_templates} ? 1 : 0;
-    my @consortia_branches;
-    if ( ref $opts{consortia_branches} eq 'ARRAY' ) {
-        @consortia_branches = @{ $opts{consortia_branches} };
-    }
-    elsif ( defined $opts{consortia_branches} && length $opts{consortia_branches} ) {
-        @consortia_branches = split /,/, $opts{consortia_branches};
-    }
-    @consortia_branches = map { s/^\s+|\s+$//gr } @consortia_branches;
-    @consortia_branches = grep { length } @consortia_branches;
-
     my $dbh = $opts{dbh};
     unless ($dbh) {
         eval {
@@ -2102,25 +2175,11 @@ sub run_remove {
         };
     }
 
-    if ( $opts{consortia_from_plugin} ) {
-        my @from_plugin = _plugin_enabled_branches( $opts{plugin}, $dbh, \@log_lines );
-        if (@from_plugin) {
-            _log( \@log_lines, "Plugin enabled_branches: " . join( ', ', @from_plugin ) );
-            push @consortia_branches, @from_plugin;
-        }
-        else {
-            _log( \@log_lines, "consortia_from_plugin: no concrete branches in enabled_branches (unset/*/empty)." );
-        }
-    }
-
-    {
-        my %seen;
-        @consortia_branches = grep { !$seen{$_}++ } @consortia_branches;
-    }
-
-    unless ( $do_defaults || $do_ci_templates || @consortia_branches ) {
-        $do_defaults = 1;
-        _log( \@log_lines, "No remove mode given; assuming defaults." );
+    my ( $do_defaults, $do_ci_templates, $branch_ref, $consortia_canned, $scope_error )
+      = _prepare_install_scope( \%opts, $dbh, \@log_lines, 'remove' );
+    my @consortia_branches = @{ $branch_ref || [] };
+    if ($scope_error) {
+        return { ok => 0, count => 0, log => join( '', @log_lines ), error => $scope_error };
     }
 
     _log( \@log_lines, "CirriusImpact Message Template Remover / Revert" );
@@ -2130,6 +2189,8 @@ sub run_remove {
     $modes .= " defaults" if $do_defaults;
     $modes .= " ci-templates" if $do_ci_templates;
     $modes .= " consortia-branch=" . join( ',', @consortia_branches ) if @consortia_branches;
+    $modes .= $consortia_canned ? " consortia-content=ci-templates" : " consortia-content=existing"
+      if @consortia_branches;
     _log( \@log_lines, "Modes:$modes" );
 
     my %want_service = map { $_ => 1 } @want_services;
@@ -2138,7 +2199,7 @@ sub run_remove {
 
     my @branch_targets;
     push @branch_targets, '' if $do_defaults;
-    push @branch_targets, @consortia_branches;
+    push @branch_targets, @consortia_branches unless $consortia_canned;
 
     eval {
         # 1) Revert wrapped stock / branch notices
@@ -2159,6 +2220,7 @@ sub run_remove {
                 next unless $want_lang{$lang};
                 # Stock/consortia revert never touches CODE-CI samples
                 next if $code =~ /-CI\z/;
+                next if ( $row->{content} // '' ) =~ /CirriusImpact Default/;
                 next unless _already_ci_yaml( $row->{content} );
 
                 my $original = _extract_original_from_wrapped( $row->{content} );
@@ -2187,51 +2249,15 @@ sub run_remove {
             $sth->finish();
         }
 
-        # 2) CI Defaults were written onto the normal letter code. Restore the
+        # 2) CI templates wrote canned text onto the normal letter. Restore the
         #    archived notice, or delete the row when this install created it.
-        if ($do_ci_templates) {
-            my $sth = $dbh->prepare(q{
-                SELECT module, code, message_transport_type, lang, branchcode, content
-                FROM letter
-                WHERE branchcode = ''
-                  AND content LIKE '%CirriusImpact Default%'
-            });
-            $sth->execute();
-            while ( my $row = $sth->fetchrow_hashref ) {
-                my $code      = $row->{code} // '';
-                my $transport = $row->{message_transport_type} // '';
-                my $lang      = $row->{lang} // '';
-                next if $code =~ /-CI\z/;
-                next unless $want_service{$transport};
-                next unless $want_lang{$lang};
-                my $original = _extract_original_from_wrapped( $row->{content} );
-                if ( defined $original && $original =~ /\S/ ) {
-                    my $upd = $dbh->prepare(q{
-                        UPDATE letter
-                        SET content = ?
-                        WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
-                          AND branchcode = ?
-                    });
-                    $upd->execute(
-                        $original, $row->{module}, $code, $transport, $lang, ''
-                    );
-                    $upd->finish();
-                    $count++;
-                    _log( \@log_lines, "Reverted CI default $code/$transport [$lang] (branch=DEFAULT)" );
-                }
-                else {
-                    my $del = $dbh->prepare(q{
-                        DELETE FROM letter
-                        WHERE module = ? AND code = ? AND message_transport_type = ? AND lang = ?
-                          AND branchcode = ?
-                    });
-                    $del->execute( $row->{module}, $code, $transport, $lang, '' );
-                    $del->finish();
-                    $count++;
-                    _log( \@log_lines, "Deleted CI default $code/$transport [$lang] (branch=DEFAULT)" );
-                }
-            }
-            $sth->finish();
+        my @canned_branches;
+        push @canned_branches, '' if $do_ci_templates;
+        push @canned_branches, @consortia_branches if $consortia_canned;
+        for my $branch (@canned_branches) {
+            $count += _revert_canned_branch(
+                $dbh, $branch, \%want_service, \%want_lang, \@log_lines
+            );
         }
 
         # 3) Remove older canned CODE-CI sample rows from previous installs
@@ -2292,6 +2318,7 @@ sub run_remove {
             defaults           => $do_defaults,
             ci_templates       => $do_ci_templates,
             consortia_branches => \@consortia_branches,
+            consortia_canned   => $consortia_canned,
             services           => \@want_services,
             languages          => \@want_langs,
         },

@@ -4,10 +4,11 @@
 
 | Mode | Writes | Typical use |
 |------|--------|-------------|
-| `--defaults` | Stock `CODE` at `branchcode=''` | Single library (default if no mode given) |
-| `--ci-templates` | Canned CI Defaults on the normal `CODE` (SMS and phone). No new `CODE-CI` letter | Put the CI default on the notice Koha already sends |
-| `--consortia-branch=CPL[,UPL…]` | Same `CODE`, branch-scoped rows | Consortia |
+| `--defaults` | Wrap the letter already stored at `branchcode=''` | Single library (default if no mode given) |
+| `--ci-templates` | Canned CI templates on the normal `CODE` at `branchcode=''` (SMS and phone). No new `CODE-CI` letter | Put the CI default on the notice Koha already sends |
+| `--consortia-branch=CPL[,UPL…]` | Same `CODE` on those branches. Wraps unless `--consortia-content=ci-templates` | Consortia |
 | `--consortia-from-plugin` | Same for Configure → Branch services (enabled branches) | Consortia after matrix Save |
+| `--consortia-content=ci-templates` | Canned CI templates on the consortia branches selected above | Consortia using the CI default wording |
 
 `--consortia-branch=CPL` creates `CHECKOUT` with `branchcode=CPL`, not `CHECKOUT-CPL`. The plugin also exports `*-CI` letter codes.
 

@@ -53,7 +53,7 @@ use YAML::XS qw(Load);
 
 # Keep purely numeric segments: Koha's plugin version compare splits on
 # [.+:~-] and int()s each part, so suffixes like "-dev" emit warnings.
-our $VERSION = "1.3.12";
+our $VERSION = "1.3.13";
 our $MINIMUM_VERSION = "24.05";
 
 our $metadata = {
@@ -293,16 +293,35 @@ sub _ci_download_notice_review {
     return;
 }
 
-# POST/GET from Configure → Install notice templates section.
-sub _ci_configure_install_templates {
+# Configure → Install notice templates.
+# Two choices: what to write (CI templates or Library Existing) and where
+# (system default, branches enabled in Branch services, or named branchcodes).
+# Older forms that only send install_mode still map to Library Existing for
+# the two consortia values, and to CI templates or Library Existing at system default.
+sub _ci_notice_install_request {
     my ( $self, $cgi ) = @_;
 
-    unless ( scalar $cgi->param('install_templates_confirm') ) {
-        return ( 0, 'Confirm the overwrite checkbox before installing templates.', '' );
+    my $content = scalar $cgi->param('install_content') // '';
+    my $scope   = scalar $cgi->param('install_scope') // '';
+    if ( $content !~ /^(ci-templates|existing)\z/ || $scope !~ /^(system|plugin|branches)\z/ ) {
+        my $mode = scalar $cgi->param('install_mode') // '';
+        if ( $mode eq 'defaults' ) {
+            $content = 'existing';
+            $scope   = 'system';
+        }
+        elsif ( $mode eq 'consortia-from-plugin' ) {
+            $content = 'existing';
+            $scope   = 'plugin';
+        }
+        elsif ( $mode eq 'consortia-branch' ) {
+            $content = 'existing';
+            $scope   = 'branches';
+        }
+        else {
+            $content = 'ci-templates';
+            $scope   = 'system';
+        }
     }
-
-    my $mode = scalar $cgi->param('install_mode') // 'ci-templates';
-    $mode = 'ci-templates' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
 
     my @services;
     push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
@@ -320,7 +339,7 @@ sub _ci_configure_install_templates {
     $default_language = 'en' unless $default_language =~ /^(en|es-ES|fr-CA|eng|spa|fre)\z/;
 
     my @branches;
-    if ( $mode eq 'consortia-branch' ) {
+    if ( $scope eq 'branches' ) {
         my $raw = scalar $cgi->param('install_consortia_branches') // '';
         for my $b ( split /,/, $raw ) {
             $b =~ s/^\s+|\s+$//g;
@@ -337,20 +356,39 @@ sub _ci_configure_install_templates {
             @branches = grep { !$seen{$_}++ } @branches;
         }
         unless (@branches) {
-            return ( 0, 'Select or enter at least one Koha branchcode for consortia-branch mode.', '' );
+            return { error => 'Select or enter at least one Koha branchcode.' };
         }
     }
 
-    my %run = (
-        defaults              => ( $mode eq 'defaults' ) ? 1 : 0,
-        ci_templates          => ( $mode eq 'ci-templates' ) ? 1 : 0,
-        consortia_from_plugin => ( $mode eq 'consortia-from-plugin' ) ? 1 : 0,
-        consortia_branches    => \@branches,
-        services              => \@services,
-        languages             => \@languages,
-        default_language      => $default_language,
-        plugin                => $self,
-    );
+    my $canned = $content eq 'ci-templates' ? 1 : 0;
+    return {
+        run => {
+            defaults              => ( $scope eq 'system' && !$canned ) ? 1 : 0,
+            ci_templates          => ( $scope eq 'system' && $canned ) ? 1 : 0,
+            consortia_from_plugin => ( $scope eq 'plugin' ) ? 1 : 0,
+            consortia_branches    => \@branches,
+            consortia_canned      => ( $scope ne 'system' && $canned ) ? 1 : 0,
+            services              => \@services,
+            languages             => \@languages,
+            default_language      => $default_language,
+            plugin                => $self,
+        },
+    };
+}
+
+# POST/GET from Configure → Install notice templates section.
+sub _ci_configure_install_templates {
+    my ( $self, $cgi ) = @_;
+
+    unless ( scalar $cgi->param('install_templates_confirm') ) {
+        return ( 0, 'Confirm the overwrite checkbox before installing templates.', '' );
+    }
+
+    my $request = $self->_ci_notice_install_request($cgi);
+    if ( $request->{error} ) {
+        return ( 0, $request->{error}, '' );
+    }
+    my %run = %{ $request->{run} };
 
     my $result = eval {
         require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
@@ -383,52 +421,11 @@ sub _ci_configure_remove_templates {
         return ( 0, 'Confirm the remove/revert checkbox before continuing.', '' );
     }
 
-    my $mode = scalar $cgi->param('install_mode') // 'ci-templates';
-    $mode = 'ci-templates' unless $mode =~ /^(defaults|ci-templates|consortia-from-plugin|consortia-branch)\z/;
-
-    my @services;
-    push @services, 'sms'   if scalar $cgi->param('install_svc_sms');
-    push @services, 'phone' if scalar $cgi->param('install_svc_phone');
-    @services = ( 'sms', 'phone' ) unless @services;
-
-    my @languages;
-    push @languages, 'default' if scalar $cgi->param('install_lang_default');
-    push @languages, 'en'      if scalar $cgi->param('install_lang_en');
-    push @languages, 'es-ES'   if scalar $cgi->param('install_lang_es');
-    push @languages, 'fr-CA'   if scalar $cgi->param('install_lang_fr');
-    @languages = ( 'default', 'en', 'es-ES', 'fr-CA' ) unless @languages;
-
-    my @branches;
-    if ( $mode eq 'consortia-branch' ) {
-        my $raw = scalar $cgi->param('install_consortia_branches') // '';
-        for my $b ( split /,/, $raw ) {
-            $b =~ s/^\s+|\s+$//g;
-            push @branches, $b if length $b;
-        }
-        my @multi = $cgi->param('install_branch');
-        for my $b (@multi) {
-            next unless defined $b;
-            $b =~ s/^\s+|\s+$//g;
-            push @branches, $b if length $b;
-        }
-        {
-            my %seen;
-            @branches = grep { !$seen{$_}++ } @branches;
-        }
-        unless (@branches) {
-            return ( 0, 'Select or enter at least one Koha branchcode for consortia-branch mode.', '' );
-        }
+    my $request = $self->_ci_notice_install_request($cgi);
+    if ( $request->{error} ) {
+        return ( 0, $request->{error}, '' );
     }
-
-    my %run = (
-        defaults              => ( $mode eq 'defaults' ) ? 1 : 0,
-        ci_templates          => ( $mode eq 'ci-templates' ) ? 1 : 0,
-        consortia_from_plugin => ( $mode eq 'consortia-from-plugin' ) ? 1 : 0,
-        consortia_branches    => \@branches,
-        services              => \@services,
-        languages             => \@languages,
-        plugin                => $self,
-    );
+    my %run = %{ $request->{run} };
 
     my $result = eval {
         require Koha::Plugin::Com::CirriusImpact::InstallMessageTemplates;
